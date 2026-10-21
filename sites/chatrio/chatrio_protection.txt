@@ -1,0 +1,32 @@
+====================================================================
+SITE PROTECTION & INTELLIGENCE NOTE: Chatrio.app (Anonymous 1v1) (chatrio)
+====================================================================
+Site ID            : chatrio
+Site Name          : Chatrio.app (Anonymous 1v1)
+Engine Family      : family_a
+Account Setup Mode : auto_register
+Target Start URL   : https://chatrio.app/chat
+Auth Mode          : dom_only
+
+1. ONBOARDING & GUEST ENTRY FLOW
+--------------------------------------------------------------------
+18+ Yes modal -> Accept cookies -> Your name + I am: Woman -> New Chat
+- Auto-Onboard Agent in dom_driver.js automatically ticks 18+ checkboxes,
+  selects Female/Woman/Girl, fills a natural female guest alias + age 21
+  if prompted, and clicks Start / New Chat.
+
+2. ANTI-BOT & PROTECTION DETAILS
+--------------------------------------------------------------------
+Zero CAPTCHA, zero account required. Ephemeral WebSocket session with no message retention; pace outbound links to avoid report triggers.
+
+3. SAFE BOT OPERATION RULES (FOR FUTURE WORK)
+--------------------------------------------------------------------
+- Recommended Reply Delay : 2.0s – 5.0s (configured in Dashboard Show Mode).
+- Username / Snap Sharing : Share only on later turns or when asked (EVAChat /
+                            API Chat funnel handles this automatically).
+- Selector Auto-Recovery  : If this site updates its HTML layout, run
+                            source_code/capture/run.bat or skills/dom_auto_scout.js
+                            to refresh selectors in sites/chatrio/site.json.
+- Isolated Accounts Path  : sites/chatrio/accounts/
+- Isolated Profile Path   : sites/chatrio/profiles/default/
+====================================================================

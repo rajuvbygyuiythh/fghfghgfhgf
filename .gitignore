@@ -1,0 +1,39 @@
+# Runtime data and private state (never commit)
+data/
+_global/
+*.tmp
+logs.txt
+source_code/logs.txt
+
+# Build output and binaries
+build/
+source_code/build/
+*.exe
+*.dll
+*.zip
+
+# Node / verification output
+node_modules/
+source_code/node_modules/
+source_code/verification-output/
+coverage/
+
+# Site runtime state: keep the folder markers, never the cookies/sessions
+sites/*/accounts/*
+!sites/*/accounts/.gitkeep
+sites/*/profiles/*
+!sites/*/profiles/.gitkeep
+!sites/*/profiles/default/
+sites/*/profiles/default/*
+!sites/*/profiles/default/.gitkeep
+sites/*/sessions/*
+!sites/*/sessions/.gitkeep
+sites/*/logs/*
+!sites/*/logs/.gitkeep
+*.log
+*.jsonl.tmp
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

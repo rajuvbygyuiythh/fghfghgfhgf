@@ -1,0 +1,25 @@
+{
+  "id": "chatusa",
+  "name": "ChatUSA.club (Fast Stranger Match)",
+  "family": "family_e",
+  "account_mode": "auto_register",
+  "enabled": true,
+  "start_url": "https://www.chatusa.club/stranger-chat",
+  "app_url": "https://www.chatusa.club/stranger-chat",
+  "auth_mode": "dom_only",
+  "entry_flow": "Quick guest entry -\u003e Instant Stranger Chat (\u003c3s match)",
+  "protection_summary": "AI moderation and mobile-friendly stranger-to-stranger text/video.",
+  "selectors": {
+    "composer_input": "textarea:not([disabled]), input[type=\"text\"]:not([disabled])[placeholder*=\"message\" i], input[type=\"text\"]:not([disabled])[placeholder*=\"type\" i], #messageInput, #chatInput",
+    "send_button": "button#sendBtn, button[type=\"submit\"], button.send-btn, button[aria-label*=\"Send\" i]",
+    "skip_button": "button#skipBtn, button#nextBtn, button.skip-btn, button.next-btn, button[aria-keyshortcuts=\"Escape\"]",
+    "start_button": "button#startBtn, button.start-btn, button.new-chat, button[type=\"submit\"]",
+    "message_history": "#messages, .messages, .chat-box, .chat-messages, .logbox, main",
+    "message_row": ".message, .msg, .chat-msg, .logitem, li",
+    "message_text": ".text, .msg-text, p, span",
+    "partner_message_selector": ".stranger, .incoming, .partner, .other, .left",
+    "own_message_selector": ".you, .outgoing, .self, .me, .right",
+    "partner_name": ".stranger-name, .partner-name",
+    "chat_ended_text": "stranger has disconnected|partner left|chat ended|disconnected"
+  }
+}

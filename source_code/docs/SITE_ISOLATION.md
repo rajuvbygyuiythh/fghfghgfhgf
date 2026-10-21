@@ -1,0 +1,137 @@
+# Phase 1 — Site folder isolation (foundation)
+
+Completed source update: 2026-10-21 (owner timezone).
+
+Owner requirement: the app ships 102 sites. Every site must own a real folder that
+holds its browser profile, saved session, cookies, accounts and logs. One site's
+code must never read or write another site's folder. The only shared directory is
+`_global/`, used for application settings.
+
+## Resulting layout
+
+```
+<project>/                       # folder that contains wails.json
+├─ data/
+│  └─ _global/                   # SHARED, application-wide only
+│     ├─ ui/                     # Badger DB + message_settings.json mirror
+│     ├─ logs.txt                # desktop/app diagnostics (JSON lines)
+│     ├─ memory/                 # chat_history.jsonl, operation_memory.json
+│     └─ settings/               # reserved for cross-site preferences
+└─ sites/                        # 102 site folders, one per site, no sharing
+   ├─ chitchat/                  # the default site also gets a real folder
+   │  ├─ site.json
+   │  ├─ dom_driver.js
+   │  ├─ README.txt
+   │  ├─ chitchat_protection.txt
+   │  ├─ accounts/               # accounts/<profile>.json + saved credentials
+   │  ├─ profiles/<profile>/     # Chromium user-data dir + login_info*.json
+   │  ├─ sessions/               # latest_session.json, session_<profile>.json
+   │  └─ logs/                   # debug.jsonl, last_diagnostics.json
+   ├─ omezy/
+   └─ … 99 more
+```
+
+`<project>/sites` is reused when it already exists next to `data/`; otherwise the
+root falls back to `data/sites`. Both cases resolve through one function,
+`SitesRoot`, so callers never hardcode a root.
+
+## The isolation module
+
+`internal/sites/isolation.go` owns every path decision.
+
+`SiteContext` is the only supported way to reach site files:
+
+| Field / method | Purpose |
+| --- | --- |
+| `SiteID`, `FolderPath` | identity and the one allowed root |
+| `AccountsPath`, `ProfilesPath`, `SessionsPath`, `LogsPath` | fixed sub-roots |
+| `DefaultProfilePath`, `DefaultSessionPath`, `DebugLogPath` | well-known files |
+| `Resolve(rel)` | validate + join inside the site folder |
+| `EnsureDir`, `ReadFile`, `WriteFile`, `OpenFile`, `Rename`, `Remove`, `RemoveAll`, `Glob`, `Stat`, `Lstat`, `ReadDir` | file operations that cannot leave the folder |
+| `SaveJSON`, `LoadJSON`, `WriteAtomic` | atomic structured state |
+| `ProfilePath(profile)`, `BrowserProfileDir(profile)`, `SessionPath(profile)`, `LatestSessionPath()`, `AccountPath(name)`, `LogPath(name)` | named entry points |
+| `GlobalPath(rel)`, `GlobalResolve(rel)` | the only door to `_global/` |
+
+`NewSiteContext(dataDir, siteID)` refuses to build a context for an invalid ID or
+for a site folder that is a symlink, so a tampered directory tree cannot redirect
+a site to another site's data.
+
+## Path safety contract
+
+`SafeJoin(root, rel)` is the single gatekeeper. It rejects, in this order:
+
+1. empty root, NUL bytes, control characters;
+2. absolute paths, Windows volume names, UNC/device paths;
+3. any backslash separator (accepted on Windows, rejected everywhere for parity);
+4. any `..` segment **before** `filepath.Clean` can normalise it away;
+5. `..` in the cleaned relative path;
+6. Windows-reserved names and alternate-data-stream suffixes;
+7. any target that resolves outside the root, including through symlinks —
+   the target (or its nearest existing ancestor) is resolved with
+   `filepath.EvalSymlinks` and re-checked against the resolved root.
+
+`SiteContext` uses `SafeJoin` for every operation, so the guarantee is enforced
+once instead of being re-implemented per feature.
+
+## Legacy migration
+
+On first start the manager merges the pre-isolation shared state into the default
+site, never overwriting newer files:
+
+| Before | After |
+| --- | --- |
+| `data/profiles/**` | `sites/chitchat/profiles/**` |
+| `data/login_info_*.json` | `sites/chitchat/profiles/default/` |
+| `data/bot_registry.json` | `sites/chitchat/bot_registry.json` |
+| `data/tmp`, `data/fresh-runs` | `sites/chitchat/{tmp,fresh-runs}` |
+| `data/ui/**` | `data/_global/ui/**` |
+| `data/memory/**` | `data/_global/memory/**` |
+| `<project>/logs.txt` | `data/_global/logs.txt` |
+
+Directories are merged recursively; a one-time rename is used where the whole
+subtree moves as a unit. After migration, `data/` contains only `_global/`.
+
+## Behaviour changes that are part of the contract
+
+- `sites.List`, `sites.SiteDir`, `sites.DataDirForSite`, `sites.LoadSite` and
+  `sites.CreateSiteWithMode` all resolve through `SiteContext`.
+- Browser profiles, `login_info` files, session snapshots, account files, debug
+  logs and per-site `api_chat/` / `eva_chat/` packs live inside the site folder.
+- `ListProfiles` and the banned-user cleanup resolve the active site folder, so
+  two sites with a profile called `default` never share cookies.
+- `applog.Path(dataDir)` is `<dataDir>/_global/logs.txt`; both entry points create
+  `_global/` before the first log line, so no startup diagnostic is lost.
+- `memory.NewStore` writes to `<dataDir>/_global/memory` and renames a legacy
+  `data/memory` once.
+- `uistore.Open` writes Badger and the message-settings mirror under
+  `<dataDir>/_global/ui`.
+
+## Regression coverage
+
+`internal/sites/isolation_test.go` proves the rule, not just the layout:
+
+- 102 sites ⇒ 102 folders, and only `_global/` is shared;
+- site A cannot read, write, glob or resolve site B's files, including via `..`,
+  absolute paths, sibling IDs, and a symlink planted inside site A;
+- invalid/aliasing IDs (`""`, `.`, `..`, `../x`, `a/b`, `a\b`, `_global`, `Sites`,
+  `Chatib`, …) are rejected;
+- `CleanSiteRuntime` deletes only the requested site's runtime folders;
+- session and account writers stay inside the site folder.
+
+Run the suite:
+
+```
+go build ./... && go vet ./...
+go test ./... ./internal/sites/... -count=1
+go test -race ./internal/sites/ ./internal/memory/ ./internal/uistore/ ./internal/applog/ .
+```
+
+## Boundaries of this phase
+
+- The site **catalog** (`sites/<id>/site.json`, `dom_driver.js`, `README.txt`) is
+  the same shipped tree; isolation protects runtime state, not the shared code.
+- Older documents (`docs/PROJECT_MEMORY.md`, `docs/FILE_LOGGING.md`,
+  `docs/EVACHAT_FLOW_GUIDE.md`) still describe the pre-Phase-1 paths. This file is
+  authoritative for paths until those documents are revised.
+- `cmd/apichat` (Persona Studio) intentionally keeps its own `data/api_chat`
+  working folder; it is a separate tool, not a site worker.

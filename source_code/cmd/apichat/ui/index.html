@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChitChat API Chat Tester &amp; Persona Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="studio-shell">
+    <!-- Top Bar: 3 Simple Options + Test API + Save -->
+    <header class="studio-header">
+      <div class="studio-brand">
+        <span class="studio-badge">apichat.exe</span>
+        <div>
+          <h1>API Chat Tester &amp; Persona Control</h1>
+        </div>
+      </div>
+
+      <nav class="studio-tabs" role="tablist">
+        <button class="studio-tab active" data-tab="chat" type="button">1 · Chat Test &amp; Logs</button>
+        <button class="studio-tab" data-tab="persona" type="button">2 · Persona Prompt</button>
+        <button class="studio-tab" data-tab="settings" type="button">3 · Settings (API &amp; Temp)</button>
+      </nav>
+
+      <div class="studio-header-actions">
+        <button id="studio-test-api" class="btn secondary" type="button">Test API</button>
+        <button id="studio-save" class="btn primary" type="button">Save &amp; Sync</button>
+      </div>
+    </header>
+
+    <div id="studio-save-status" class="status-banner" role="status">
+      Ready. Changes saved here automatically sync with the main dashboard (<code>chitchatui.exe</code>).
+    </div>
+
+    <!-- OPTION 1: CHAT TEST + LOGIC LOGS -->
+    <section id="tab-chat" class="tab-view active">
+      <div class="chat-logs-grid">
+        <!-- Left: Live Chat Test -->
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Chat Test (You = Stranger)</h2>
+              <p id="studio-chat-state" class="muted">Click <b>New Chat</b> or type a message below to test the bot.</p>
+            </div>
+            <div class="toolbar-btns">
+              <button id="studio-chat-start" class="btn primary sm" type="button">New Chat</button>
+              <button id="studio-chat-clear" class="btn secondary sm" type="button">Clear</button>
+            </div>
+          </div>
+
+          <div id="studio-chat-log" class="chat-transcript" role="log" aria-live="polite">
+            <div class="chat-empty">Press <b>New Chat</b> or type below (e.g. <code>hi</code>, <code>m 22</code>, <code>how are u</code>) to start chatting.</div>
+          </div>
+
+          <div class="quick-bar">
+            <span class="muted">1-Click Test:</span>
+            <button class="btn ghost sm quick-msg" data-msg="hi" type="button">hi</button>
+            <button class="btn ghost sm quick-msg" data-msg="hey how are u" type="button">hey how are u</button>
+            <button class="btn ghost sm quick-msg" data-msg="m 22 usa" type="button">m 22 usa</button>
+            <button class="btn ghost sm quick-msg" data-msg="wyd tonight" type="button">wyd tonight</button>
+            <button class="btn ghost sm quick-msg" data-msg="u got snap?" type="button">u got snap?</button>
+          </div>
+
+          <div class="chat-composer">
+            <input id="studio-chat-input" type="text" placeholder="Type as the stranger and press Enter..." autocomplete="off" />
+            <button id="studio-chat-send" class="btn primary" type="button">Send</button>
+          </div>
+        </div>
+
+        <!-- Right: Why Bot Replied / Logic & Prompt Fault Logs -->
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Logic &amp; Prompt Diagnostic Logs</h2>
+              <p class="muted">Shows exactly which logic rule fired, what instruction was given, and if the prompt/model had any issue.</p>
+            </div>
+            <div class="toolbar-btns">
+              <button id="studio-logs-clear" class="btn ghost sm" type="button">Clear Logs</button>
+            </div>
+          </div>
+
+          <div id="studio-logic-logs" class="logic-log-list" role="log" aria-live="polite">
+            <div class="chat-empty">Every bot reply will log its exact logic rule, prompt instruction, raw model output, and prompt diagnostics here.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- OPTION 2: SINGLE PERSONA PROMPT BOX -->
+    <section id="tab-persona" class="tab-view">
+      <div class="persona-grid">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Persona Prompt (<code>data/api_chat/persona.txt</code>)</h2>
+              <p class="muted">One single Persona prompt controls how the bot talks. Edit directly or load a <code>.txt</code> file.</p>
+            </div>
+            <div class="toolbar-btns">
+              <input id="studio-load-txt-input" type="file" accept=".txt,text/plain" hidden />
+              <button id="studio-load-txt-btn" class="btn secondary sm" type="button">Load .txt File</button>
+              <button id="studio-export-txt-btn" class="btn secondary sm" type="button">Export .txt</button>
+              <button id="studio-reset-deck" class="btn ghost sm" type="button">Reset Default</button>
+              <button id="studio-apply-persona" class="btn primary sm" type="button">Save Persona &amp; Test Chat</button>
+            </div>
+          </div>
+
+          <textarea id="studio-persona" class="persona-textarea" rows="18" spellcheck="false" placeholder="Write or paste your full bot persona prompt here..."></textarea>
+
+          <div class="card-foot">
+            <span class="muted">Placeholders supported: <code>{age}</code> <code>{country}</code> <code>{name}</code> <code>{major}</code> <code>{year}</code> <code>{tonight}</code> <code>{show}</code> <code>{snack}</code></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h2>Active Character Prompt Preview</h2>
+              <p class="muted">Exact system prompt sent to the AI model in the current chat session.</p>
+            </div>
+          </div>
+          <pre id="studio-rendered-persona" class="rendered-prompt-box">Start a chat to preview the active character prompt.</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- OPTION 3: SETTINGS (API, TEMPERATURE, SHARE TURNS) -->
+    <section id="tab-settings" class="tab-view">
+      <div class="card settings-card">
+        <div class="card-head">
+          <div>
+            <h2>API &amp; Bot Settings</h2>
+            <p class="muted">Saved settings are automatically shared with the main dashboard (<code>chitchatui.exe</code>).</p>
+          </div>
+          <div class="toolbar-btns">
+            <button id="studio-open-folder" class="btn secondary sm" type="button">Open data/api_chat Folder</button>
+            <button id="studio-save-settings" class="btn primary sm" type="button">Save Settings</button>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span>API Base URL</span>
+            <input id="studio-base-url" type="text" placeholder="https://api.featherless.ai/v1" />
+          </label>
+          <label class="field">
+            <span>Model Name</span>
+            <input id="studio-model" type="text" placeholder="deepseek-ai/DeepSeek-V3-0324" />
+          </label>
+          <label class="field field-wide">
+            <span>API Key</span>
+            <input id="studio-api-key" type="password" placeholder="sk-... or rc_..." autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Temperature (0.1 – 2.0)</span>
+            <input id="studio-temperature" type="number" step="0.05" min="0.1" max="2.0" value="0.9" />
+          </label>
+          <label class="field">
+            <span>Snap Share Turn — HOT</span>
+            <input id="studio-share-hot" type="number" min="1" max="30" value="4" />
+          </label>
+          <label class="field">
+            <span>Snap Share Turn — WARM</span>
+            <input id="studio-share-warm" type="number" min="1" max="30" value="6" />
+          </label>
+          <label class="field">
+            <span>Snap Share Turn — COLD</span>
+            <input id="studio-share-cold" type="number" min="1" max="30" value="8" />
+          </label>
+          <label class="field field-wide">
+            <span>Snap Usernames (one per line, replaces <code>%username%</code> when sharing)</span>
+            <textarea id="studio-usernames" rows="4" spellcheck="false" placeholder="your_snap_username"></textarea>
+          </label>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

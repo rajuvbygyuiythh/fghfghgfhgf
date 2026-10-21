@@ -1,0 +1,25 @@
+{
+  "id": "chat42",
+  "name": "Chat42.com (Instant Name -\u003e 1v1)",
+  "family": "family_d",
+  "account_mode": "auto_register",
+  "enabled": true,
+  "start_url": "https://chat42.com/",
+  "app_url": "https://chat42.com/",
+  "auth_mode": "dom_only",
+  "entry_flow": "Enter your name -\u003e Start instant random text chat",
+  "protection_summary": "Native messaging-style web UI with zero registration.",
+  "selectors": {
+    "composer_input": "textarea:not([disabled]), input#content:not([disabled]), input#message_content:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"say\" i]:not([disabled])",
+    "send_button": "button#submit_button, button[type=\"submit\"], button.send_btn, input[type=\"submit\"]",
+    "skip_button": "button.disconnect, button.next-stranger, button.skip-btn, a.leave",
+    "start_button": "button.start-chat, button#start, input[type=\"submit\"], button.connect",
+    "message_history": "#chat_logs_container, .chat-logs, .messages, .logbox, #messages, main",
+    "message_row": ".chat_log, .logitem, .message-row, .msg-item, li",
+    "message_text": ".my_text, .chat_message, .message-text, p, span",
+    "partner_message_selector": ".other_user, .strangermsg, .partner, .incoming, .them",
+    "own_message_selector": ".me_user, .youmsg, .self, .outgoing, .mine",
+    "partner_name": ".private_target, .partner-name, .stranger-name",
+    "chat_ended_text": "disconnected|ended the chat|left the conversation"
+  }
+}

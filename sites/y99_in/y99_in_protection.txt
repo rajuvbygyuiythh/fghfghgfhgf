@@ -1,0 +1,32 @@
+====================================================================
+SITE PROTECTION & INTELLIGENCE NOTE: Y99.in (Guest Chat & Private DM) (y99_in)
+====================================================================
+Site ID            : y99_in
+Site Name          : Y99.in (Guest Chat & Private DM)
+Engine Family      : family_c
+Account Setup Mode : auto_register
+Target Start URL   : https://y99.in/frontend/
+Auth Mode          : dom_only
+
+1. ONBOARDING & GUEST ENTRY FLOW
+--------------------------------------------------------------------
+Enter guest username -> Go to chat / Random 1-on-1
+- Auto-Onboard Agent in dom_driver.js automatically ticks 18+ checkboxes,
+  selects Female/Woman/Girl, fills a natural female guest alias + age 21
+  if prompted, and clicks Start / New Chat.
+
+2. ANTI-BOT & PROTECTION DETAILS
+--------------------------------------------------------------------
+6.7M+ monthly visits, zero registration required; minimal moderation in private DMs.
+
+3. SAFE BOT OPERATION RULES (FOR FUTURE WORK)
+--------------------------------------------------------------------
+- Recommended Reply Delay : 2.0s – 5.0s (configured in Dashboard Show Mode).
+- Username / Snap Sharing : Share only on later turns or when asked (EVAChat /
+                            API Chat funnel handles this automatically).
+- Selector Auto-Recovery  : If this site updates its HTML layout, run
+                            source_code/capture/run.bat or skills/dom_auto_scout.js
+                            to refresh selectors in sites/y99_in/site.json.
+- Isolated Accounts Path  : sites/y99_in/accounts/
+- Isolated Profile Path   : sites/y99_in/profiles/default/
+====================================================================

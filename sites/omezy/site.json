@@ -1,0 +1,25 @@
+{
+  "id": "omezy",
+  "name": "Omezy.io (Text Roulette)",
+  "family": "family_a",
+  "account_mode": "auto_register",
+  "enabled": true,
+  "start_url": "https://omezy.io/text/",
+  "app_url": "https://omezy.io/text/",
+  "auth_mode": "dom_only",
+  "entry_flow": "Chat anonymously -\u003e 18+ Agree modal -\u003e Start / Esc / Send",
+  "protection_summary": "No initial CAPTCHA on text route. Enforces anonymous daily chat allowance cap; clear site storage or rotate profile if daily limit is reached.",
+  "selectors": {
+    "composer_input": "textarea:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"type\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"say\" i]:not([disabled]), [contenteditable=\"true\"]",
+    "send_button": "button[type=\"submit\"], button[aria-label*=\"Send\" i], button.send-btn, button.send",
+    "skip_button": "button[aria-keyshortcuts=\"Escape\"], button.skip-btn, button.stop-btn, button.next-btn, button[aria-label*=\"Skip\" i], button[aria-label*=\"Stop\" i], button[aria-label*=\"Leave\" i]",
+    "start_button": "button.start-btn, button.new-chat, button[aria-label*=\"Start\" i], button[type=\"submit\"]",
+    "message_history": ".chat-messages, .message-list, .logbox, .messages, [role=\"log\"], main",
+    "message_row": ".message-row, .logitem, .message, .chat-message, .msg-row, li[data-message-id], li",
+    "message_text": ".message-text, .msg-text, .content, p, span",
+    "partner_message_selector": ".strangermsg, .partner-msg, .incoming, .stranger, .them, .other, .left, [data-from=\"stranger\"], [data-author=\"partner\"]",
+    "own_message_selector": ".youmsg, .self-msg, .outgoing, .you, .me, .own, .right, [data-from=\"you\"], [data-author=\"self\"]",
+    "partner_name": ".partner-name, .stranger-name, .peer-name",
+    "chat_ended_text": "stranger has disconnected|stranger left|chat has ended|you have disconnected|looking for a partner|finding a stranger"
+  }
+}

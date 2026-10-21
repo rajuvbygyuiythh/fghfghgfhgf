@@ -1,0 +1,32 @@
+====================================================================
+SITE PROTECTION & INTELLIGENCE NOTE: Omezy.io (Text Roulette) (omezy)
+====================================================================
+Site ID            : omezy
+Site Name          : Omezy.io (Text Roulette)
+Engine Family      : family_a
+Account Setup Mode : auto_register
+Target Start URL   : https://omezy.io/text/
+Auth Mode          : dom_only
+
+1. ONBOARDING & GUEST ENTRY FLOW
+--------------------------------------------------------------------
+Chat anonymously -> 18+ Agree modal -> Start / Esc / Send
+- Auto-Onboard Agent in dom_driver.js automatically ticks 18+ checkboxes,
+  selects Female/Woman/Girl, fills a natural female guest alias + age 21
+  if prompted, and clicks Start / New Chat.
+
+2. ANTI-BOT & PROTECTION DETAILS
+--------------------------------------------------------------------
+No initial CAPTCHA on text route. Enforces anonymous daily chat allowance cap; clear site storage or rotate profile if daily limit is reached.
+
+3. SAFE BOT OPERATION RULES (FOR FUTURE WORK)
+--------------------------------------------------------------------
+- Recommended Reply Delay : 2.0s – 5.0s (configured in Dashboard Show Mode).
+- Username / Snap Sharing : Share only on later turns or when asked (EVAChat /
+                            API Chat funnel handles this automatically).
+- Selector Auto-Recovery  : If this site updates its HTML layout, run
+                            source_code/capture/run.bat or skills/dom_auto_scout.js
+                            to refresh selectors in sites/omezy/site.json.
+- Isolated Accounts Path  : sites/omezy/accounts/
+- Isolated Profile Path   : sites/omezy/profiles/default/
+====================================================================

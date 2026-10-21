@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChitChat Bot</title>
+  <link rel="stylesheet" href="./styles.css?v=5">
+</head>
+<body>
+  <div class="shell visible">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">CB</div>
+        <div>
+          <div class="brand-title">ChitChat Bot</div>
+          <div class="brand-subtitle">Multi-Site Engine</div>
+        </div>
+      </div>
+
+      <div class="site-selector-box" aria-label="Target Site">
+        <div class="site-box-head">
+          <span class="status-label">Target Site (100+)</span>
+          <div class="site-box-btns">
+            <button type="button" id="site-toggle-new" class="site-mini-btn" title="Add a new isolated site">+ New</button>
+            <button type="button" id="site-run-debug" class="site-mini-btn" title="Run 6-step deep diagnostics for active site">Debug</button>
+            <button type="button" id="site-open-folder" class="site-mini-btn" title="Open active site folder">Folder</button>
+          </div>
+        </div>
+        <div class="site-mode-filters" role="group" aria-label="Filter sites by account setup mode">
+          <button type="button" id="site-filter-all" class="site-filter-pill active" data-site-filter="all">All</button>
+          <button type="button" id="site-filter-saved" class="site-filter-pill" data-site-filter="saved_session">&#10003; Saved</button>
+          <button type="button" id="site-filter-autoreg" class="site-filter-pill" data-site-filter="auto_register">&#9889; Auto-Reg</button>
+          <button type="button" id="site-filter-browser" class="site-filter-pill" data-site-filter="browser_setup">&#127760; Browser Acc</button>
+        </div>
+        <input type="text" id="site-search-input" placeholder="Search 100+ sites (e.g. omezy, chatib)..." autocomplete="off" aria-label="Search target sites">
+        <select id="active-site-select" aria-label="Select target site">
+          <option value="chitchat">ChitChat.gg</option>
+        </select>
+        <div id="active-site-mode-badge" class="site-mode-badge" aria-live="polite">&#127760; Browser Account Setup · 0 saved in sites/chitchat/accounts/</div>
+        <div id="site-quick-list" class="site-quick-list" aria-label="Per-site browser and bot list"></div>
+        <div id="site-new-form" class="site-new-form" hidden>
+          <input type="text" id="site-new-name" placeholder="Site Name (e.g. Uhmegle)" autocomplete="off">
+          <input type="text" id="site-new-url" placeholder="https://example.com/chat" autocomplete="off">
+          <select id="site-new-mode" aria-label="New site account mode">
+            <option value="auto_register">&#9889; Auto-Register (Without Browser)</option>
+            <option value="browser_setup">&#127760; Browser Account Setup (First Browser Run)</option>
+          </select>
+          <button type="button" id="site-create-submit" class="primary-button site-create-btn">Create Site Folder</button>
+        </div>
+        <p id="active-site-status" class="hint-text site-hint">sites/chitchat</p>
+        <div id="site-debug-box" class="site-debug-box" hidden aria-live="polite">
+          <div id="site-debug-summary" class="site-debug-summary"></div>
+          <div id="site-debug-checks" class="site-debug-checks"></div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Main modes">
+        <button class="nav-button active" data-tab="show">Show Mode</button>
+        <button class="nav-button" data-tab="bot">Background Bot</button>
+      </nav>
+
+      <nav class="subnav" id="subnav-show" aria-label="Show Mode sections">
+        <button class="subnav-button active" data-subpanel="show-setting">Setting</button>
+        <button class="subnav-button" data-subpanel="show-proxy">Proxy</button>
+        <button class="subnav-button" data-subpanel="show-message">Message</button>
+        <button class="subnav-button" data-subpanel="show-run">Run Browser</button>
+        <button class="subnav-button" data-subpanel="show-logs">Live Logs</button>
+      </nav>
+
+      <nav class="subnav" id="subnav-bot" aria-label="Background Bot sections" hidden>
+        <button class="subnav-button active" data-subpanel="bg-login">Login Capture</button>
+        <button class="subnav-button" data-subpanel="bg-proxy">Proxy</button>
+        <button class="subnav-button" data-subpanel="bg-message">Message</button>
+        <button class="subnav-button" data-subpanel="bg-settings">Bot Settings</button>
+        <button class="subnav-button" data-subpanel="bg-logs">Live Logs</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="status-row">
+          <span class="status-label">Workers</span>
+          <span id="running-pill" class="pill stopped">Stopped</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- ============================ SHOW MODE ============================ -->
+      <section class="tab-panel active" data-panel="show">
+        <header class="panel-header">
+          <div>
+            <div class="title-row">
+              <h1>Show Mode</h1>
+              <span id="show-run-badge" class="mode-badge">Idle</span>
+            </div>
+            <p>Configure, press Run Browser, log in once. The visible browser chats with these rules; close it to stop.</p>
+          </div>
+          <div class="actions">
+            <button id="show-refresh" class="secondary-button">Refresh</button>
+          </div>
+        </header>
+
+        <section class="subpanel active" data-subpanel="show-setting">
+          <div class="subpage">
+            <section class="card">
+              <h2>1 · Setting</h2>
+              <p class="hint-text">Run Browser applies these values. No separate save.</p>
+              <div class="form-grid">
+                <div class="form-grid three-column">
+                  <label>
+                    <span>First-message policy</span>
+                    <select id="sm-first-mode">
+                      <option value="bot">Bot first</option>
+                      <option value="user">User first</option>
+                      <option value="random">Random</option>
+                    </select>
+                  </label>
+                  <div id="sm-first-percent-row" hidden>
+                    <label>
+                      <span>Bot first chance (%)</span>
+                      <input type="number" id="sm-first-percent" min="0" max="100" step="1" value="70">
+                    </label>
+                  </div>
+                  <div id="sm-first-wait-row" hidden>
+                    <label>
+                      <span>Wait for first message</span>
+                      <select id="sm-first-wait">
+                        <option value="unlimited">Wait indefinitely</option>
+                        <option value="skip">Skip after timeout</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+                <div id="sm-first-timeout-row" class="form-grid two-column" hidden>
+                  <label>
+                    <span>First timeout min (s)</span>
+                    <input type="number" id="sm-first-min" min="1" max="86400" step="1" value="30">
+                  </label>
+                  <label>
+                    <span>First timeout max (s)</span>
+                    <input type="number" id="sm-first-max" min="1" max="86400" step="1" value="60">
+                  </label>
+                </div>
+                <div class="form-grid two-column">
+                  <label>
+                    <span>Reply delay min (s)</span>
+                    <input type="number" id="sm-reply-min" min="0" max="86400" step="1">
+                  </label>
+                  <label>
+                    <span>Reply delay max (s)</span>
+                    <input type="number" id="sm-reply-max" min="0" max="86400" step="1">
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input type="checkbox" id="sm-auto-skip">
+                  <span>Auto-skip when the partner stops replying</span>
+                </label>
+                <div class="form-grid two-column">
+                  <label>
+                    <span>No-reply timeout min (s)</span>
+                    <input type="number" id="sm-noreply-min" min="0" max="86400" step="1" value="60">
+                  </label>
+                  <label>
+                    <span>No-reply timeout max (s)</span>
+                    <input type="number" id="sm-noreply-max" min="0" max="86400" step="1" value="60">
+                  </label>
+                  <label>
+                    <span>Next chat wait min (s)</span>
+                    <input type="number" id="sm-next-min" min="0" max="86400" step="1" value="0">
+                  </label>
+                  <label>
+                    <span>Next chat wait max (s)</span>
+                    <input type="number" id="sm-next-max" min="0" max="86400" step="1" value="0">
+                  </label>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="show-proxy">
+          <div class="subpage">
+            <section class="card">
+              <h2>2 · Proxy</h2>
+              <label class="checkbox-row">
+                <input type="checkbox" id="sm-proxy-enabled">
+                <span>Enable proxy</span>
+              </label>
+              <label>
+                <span>Default protocol for plain lines</span>
+                <select id="sm-proxy-scheme">
+                  <option value="http">HTTP</option>
+                  <option value="socks5">SOCKS5</option>
+                </select>
+              </label>
+              <label>
+                <span>Proxy lines</span>
+                <textarea id="sm-proxy-entries" rows="5" placeholder="1.2.3.4:8080&#10;1.2.3.5:8080:user:pass&#10;socks5://user:pass@1.2.3.6:1080"></textarea>
+              </label>
+              <div class="form-actions">
+                <button type="button" id="sm-test-proxy" class="secondary-button">Test Proxy</button>
+              </div>
+              <p id="sm-proxy-status" class="status-line" role="status" aria-live="polite">Not tested.</p>
+              <div id="sm-proxy-results" class="proxy-results"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="show-message">
+          <div class="subpage">
+            <section class="card">
+              <h2>3 · Message</h2>
+              <div class="chat-mode-card">
+                <span class="mode-label">Chat mode</span>
+                <div class="mode-options">
+                  <label class="mode-option" id="sm-mode-option-single">
+                    <input type="radio" name="sm-chat-mode" value="single" id="sm-chat-mode-single" checked>
+                    <span>Single Sequence</span>
+                  </label>
+                  <label class="mode-option" id="sm-mode-option-folder">
+                    <input type="radio" name="sm-chat-mode" value="folder" id="sm-chat-mode-folder">
+                    <span>Folder Sequences</span>
+                  </label>
+                  <label class="mode-option" id="sm-mode-option-evachat">
+                    <input type="radio" name="sm-chat-mode" value="eva_chat_flow" id="sm-chat-mode-evachat">
+                    <span>EVAChat Flow</span>
+                  </label>
+                  <label class="mode-option" id="sm-mode-option-api">
+                    <input type="radio" name="sm-chat-mode" value="api_chat" id="sm-chat-mode-api">
+                    <span>API Chat</span>
+                  </label>
+                </div>
+              </div>
+
+              <div id="sm-section-single-mode">
+                <label>
+                  <span>Message sequence</span>
+                  <textarea id="sm-sequence" rows="7" placeholder="hello how are you %username%&#10;ok i am checking. wait a bit."></textarea>
+                </label>
+                <p class="hint-text">One line = one step. <code>%username%</code>, <code>{hello|hi}</code>.</p>
+              </div>
+
+              <div id="sm-section-folder-mode" style="display: none;">
+                <div class="form-actions inline">
+                  <button type="button" id="sm-load-folder" class="secondary-button">Load Folder</button>
+                  <button type="button" id="sm-clean-loaded" class="danger-button">Clean Loaded</button>
+                  <span id="sm-loaded-status" class="status-line">0 sequences loaded</span>
+                </div>
+              </div>
+
+              <div id="sm-section-evachat-mode" style="display: none;">
+                <div class="form-actions inline">
+                  <button type="button" id="sm-open-eva" class="secondary-button">Open EVAChat Data Folder</button>
+                  <span id="sm-eva-status" class="status-line">TXT data is initialized on first run.</span>
+                </div>
+                <p class="hint-text">Pure TXT flow: the reply pools in this folder decide every line. No AI is used in this mode — switch to <strong>API Chat</strong> for model-written replies.</p>
+              </div>
+
+              <div id="sm-section-api-mode" style="display: none;">
+                <div class="form-actions inline">
+                  <button type="button" id="sm-open-api" class="secondary-button">Open API Chat Data Folder</button>
+                  <span id="sm-api-data-status" class="status-line">Auto-loaded from apichat.exe</span>
+                </div>
+                <p class="hint-text">Every line is written by the model. API Key, Base URL, Model, Temperature, Share Turns, and Persona Prompt are loaded automatically from <strong>apichat.exe</strong>. Only enter your Snap / Telegram usernames below.</p>
+              </div>
+
+              <label>
+                <span>Snap / Telegram users</span>
+                <textarea id="sm-usernames" rows="3" placeholder="@snap_user_one&#10;telegram_user_two"></textarea>
+              </label>
+              <p class="hint-text"><code>%username%</code> inserts one random handle.</p>
+              <div class="form-actions inline">
+                <button type="button" id="sm-save-message" class="primary-button">Save Message Mode</button>
+                <span id="sm-message-save-status" class="status-line" role="status" aria-live="polite"></span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="show-run">
+          <div class="subpage">
+            <div class="account-options-grid">
+              <section class="card account-option-card" id="sm-autoreg-card">
+                <div class="account-card-head">
+                  <h3>&#9889; Option A · Auto-Register (Without Browser)</h3>
+                  <span id="sm-autoreg-rec-badge" class="mode-badge">Auto-Reg Sites</span>
+                </div>
+                <p class="hint-text">Creates female guest accounts (Age 21) &amp; session tokens directly without opening a browser. Saved inside <code id="sm-autoreg-folder-code">sites/chitchat/accounts/</code>.</p>
+                <div class="form-grid two-column">
+                  <label>
+                    <span>Accounts to auto-register (1–20)</span>
+                    <input type="number" id="sm-autoreg-count" min="1" max="20" step="1" value="3">
+                  </label>
+                  <div class="form-actions align-end">
+                    <button type="button" id="sm-autoreg-btn" class="primary-button">&#9889; Auto-Register Without Browser</button>
+                  </div>
+                </div>
+                <p id="sm-autoreg-status" class="status-line" role="status" aria-live="polite">Ready for browserless auto-registration.</p>
+              </section>
+
+              <section class="card account-option-card" id="sm-browser-setup-card">
+                <div class="account-card-head">
+                  <h3>&#127760; Option B · First Browser Run (Account Setup)</h3>
+                  <span id="sm-browser-rec-badge" class="mode-badge">Browser Acc Sites</span>
+                </div>
+                <p class="hint-text">For sites that require a first browser run to create/login an account or pass initial Turnstile/verification. Saved inside <code id="sm-browser-folder-code">sites/chitchat/profiles/</code>.</p>
+                <div class="form-grid two-column">
+                  <label>
+                    <span>Browser windows (1–5)</span>
+                    <input type="number" id="sm-browser-setup-count" min="1" max="5" step="1" value="1">
+                  </label>
+                  <div class="form-actions align-end">
+                    <button type="button" id="sm-browser-setup-btn" class="secondary-button">&#127760; Launch Browser for Account Setup</button>
+                  </div>
+                </div>
+                <p id="sm-browser-setup-status" class="status-line" role="status" aria-live="polite">Ready for first-run browser account setup.</p>
+              </section>
+            </div>
+
+            <section class="card run-card">
+              <h2>4 · Run Browser (Live Show Mode Chat)</h2>
+              <div class="profile-choice" id="sm-profile" role="radiogroup" aria-label="Select Profile">
+                <span class="mode-label">Select Profile</span>
+                <div class="mode-options">
+                  <label class="mode-option" id="sm-profile-option-default">
+                    <input type="radio" name="sm-profile-choice" value="default" id="sm-profile-default" checked>
+                    <span>default</span>
+                  </label>
+                  <label class="mode-option" id="sm-profile-option-session">
+                    <input type="radio" name="sm-profile-choice" value="session" id="sm-profile-session-choice">
+                    <span>session</span>
+                  </label>
+                </div>
+              </div>
+              <p id="sm-profile-session" class="hint-text">default = fresh login; session = saved default account.</p>
+              <button type="button" id="sm-run" class="primary-button run-button">&#9654; Run Browser</button>
+              <p id="sm-run-status" class="status-line" role="status" aria-live="polite">Idle.</p>
+              <p class="hint-text">Saves Setting + Proxy + Message, then opens a visible Rod browser. Log in manually; live logs start automatically. Close the browser to stop.</p>
+            </section>
+
+            <section class="card site-session-list-card">
+              <div class="account-card-head">
+                <h3>All Sites · Per-Site Browser (Auto-Save Session) &amp; Bot Runner</h3>
+                <span class="mode-badge">Isolated Per Site (sites/&lt;site_id&gt;/sessions/)</span>
+              </div>
+              <p class="hint-text">Every site has its own <strong>&#127760; Browser</strong> button right next to its name to open that site and auto-save its session strictly inside <code>sites/&lt;site_id&gt;/sessions/</code>. Once saved, click <strong>&#129302; Run Bot</strong> next to that site to chat with users using ONLY that site's saved session.</p>
+              <div id="sm-site-session-list" class="site-session-table" aria-live="polite"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="show-logs">
+          <div class="subpage">
+            <section class="card log-card">
+              <div class="log-header">
+                <h2>5 · Live Logs</h2>
+                <div class="log-tools">
+                  <select id="sm-log-filter" aria-label="Filter live logs">
+                    <option value="all">All</option>
+                    <option value="sms">SMS</option>
+                    <option value="rules">Rules</option>
+                    <option value="errors">Errors</option>
+                  </select>
+                  <button type="button" id="sm-log-clear" class="secondary-button">Clear</button>
+                </div>
+              </div>
+              <div id="sm-log-list" class="log-list" aria-live="polite"></div>
+              <p id="sm-log-empty" class="hint-text">No activity yet. Press Run Browser.</p>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <!-- ========================== BACKGROUND BOT ========================== -->
+      <section class="tab-panel" data-panel="bot">
+        <header class="panel-header">
+          <div>
+            <div class="title-row">
+              <h1>Background Bot</h1>
+              <span class="mode-badge">API worker</span>
+            </div>
+            <p>Match, DM and reply without a visible browser. A saved login and message settings are required.</p>
+            <p id="bg-summary" class="hint-text"></p>
+          </div>
+          <div class="actions">
+            <button id="bg-start" class="primary-button">Save &amp; Start Bot</button>
+            <button id="bg-stop" class="secondary-button">Stop</button>
+            <button id="bg-refresh" class="secondary-button">Refresh</button>
+          </div>
+        </header>
+
+        <p id="bg-status" class="status-line" role="status" aria-live="polite">Idle.</p>
+
+        <div class="home-stats" aria-label="Bot status">
+          <div class="stat-capsule">
+            <span>Running</span>
+            <strong id="bg-stat-running">0</strong>
+          </div>
+          <div class="stat-capsule">
+            <span>Profiles</span>
+            <strong id="bg-stat-profiles">0</strong>
+          </div>
+          <div class="stat-capsule">
+            <span>Messages sent</span>
+            <strong id="bg-stat-messages">0</strong>
+          </div>
+          <div class="stat-capsule">
+            <span>Traffic users</span>
+            <strong id="bg-stat-traffic">0</strong>
+          </div>
+          <div class="stat-capsule">
+            <span>snap/tg sent</span>
+            <strong id="bg-stat-snap">0</strong>
+          </div>
+          <div class="stat-capsule danger">
+            <span>Dead accounts</span>
+            <strong id="bg-stat-dead">0</strong>
+          </div>
+        </div>
+
+        <section class="subpanel active" data-subpanel="bg-login">
+          <div class="subpage">
+            <div class="account-options-grid">
+              <section class="card account-option-card" id="bg-autoreg-card">
+                <div class="account-card-head">
+                  <h3>&#9889; Option A · Auto-Register (Without Browser)</h3>
+                  <span id="bg-autoreg-rec-badge" class="mode-badge">Auto-Reg Sites</span>
+                </div>
+                <p class="hint-text">Registers guest accounts &amp; session tokens without opening a browser and saves them in <code id="bg-autoreg-folder-code">sites/chitchat/accounts/</code> &amp; <code>profiles/</code>.</p>
+                <div class="form-grid two-column">
+                  <label>
+                    <span>Accounts to auto-register (1–20)</span>
+                    <input type="number" id="bg-autoreg-count" min="1" max="20" step="1" value="3">
+                  </label>
+                  <div class="form-actions align-end">
+                    <button type="button" id="bg-autoreg-btn" class="primary-button">&#9889; Auto-Register Without Browser</button>
+                  </div>
+                </div>
+                <p id="bg-autoreg-status" class="status-line" role="status" aria-live="polite">Ready for browserless auto-registration.</p>
+              </section>
+
+              <section class="card account-option-card" id="bg-browser-setup-card">
+                <div class="account-card-head">
+                  <h2>1 · Login Capture (First Browser Run)</h2>
+                  <span id="bg-browser-rec-badge" class="mode-badge">Browser Acc Sites</span>
+                </div>
+                <p class="hint-text">Opens a fresh browser for manual account creation or login. The session is saved in <code id="bg-browser-folder-code">sites/chitchat/profiles/</code> and the browser closes.</p>
+                <div class="form-grid">
+                  <label>
+                    <span>Profile</span>
+                    <input type="text" id="bg-profile" placeholder="default" autocomplete="off" list="bg-profile-options">
+                  </label>
+                  <datalist id="bg-profile-options"></datalist>
+                  <p id="bg-profile-session" class="hint-text">Saved profiles are restored automatically.</p>
+                  <label>
+                    <span>Browser mode</span>
+                    <select id="bg-backend">
+                      <option value="rod">Rod</option>
+                      <option value="chromedp">ChromeDP</option>
+                    </select>
+                  </label>
+                  <label class="checkbox-row">
+                    <input type="checkbox" id="bg-headless">
+                    <span>Headless (keep off for manual login)</span>
+                  </label>
+                </div>
+                <div class="form-actions">
+                  <button type="button" id="bg-launch-login" class="secondary-button">&#127760; Launch for Login</button>
+                </div>
+                <p id="bg-login-status" class="status-line" role="status" aria-live="polite">No browser launched.</p>
+              </section>
+            </div>
+
+            <section class="card site-session-list-card">
+              <div class="account-card-head">
+                <h3>All Sites · Per-Site Browser (Auto-Save Session) &amp; Bot Runner</h3>
+                <span class="mode-badge">Isolated Per Site (sites/&lt;site_id&gt;/sessions/)</span>
+              </div>
+              <p class="hint-text">Click <strong>&#127760; Browser</strong> next to any site to open that site and auto-save its session inside <code>sites/&lt;site_id&gt;/sessions/</code>. Click <strong>&#129302; Run Bot</strong> next to a site to chat with users using ONLY that site's saved session.</p>
+              <div id="bg-site-session-list" class="site-session-table" aria-live="polite"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="bg-proxy">
+          <div class="subpage narrow">
+            <section class="card">
+              <h2>2 · Proxy</h2>
+              <label class="checkbox-row">
+                <input type="checkbox" id="bg-proxy-enabled">
+                <span>Enable proxy</span>
+              </label>
+              <label>
+                <span>Default protocol for plain lines</span>
+                <select id="bg-proxy-scheme">
+                  <option value="http">HTTP</option>
+                  <option value="socks5">SOCKS5</option>
+                </select>
+              </label>
+              <label>
+                <span>Proxy lines</span>
+                <textarea id="bg-proxy-entries" rows="5" placeholder="1.2.3.4:8080&#10;1.2.3.5:8080:user:pass"></textarea>
+              </label>
+              <div class="form-actions">
+                <button type="button" id="bg-test-proxy" class="secondary-button">Test Proxy</button>
+              </div>
+              <p id="bg-proxy-status" class="status-line" role="status" aria-live="polite">Not tested.</p>
+              <div id="bg-proxy-results" class="proxy-results"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="bg-message">
+          <div class="subpage">
+            <section class="card">
+              <h2>3 · Message</h2>
+              <div class="chat-mode-card">
+                <span class="mode-label">Chat mode</span>
+                <div class="mode-options">
+                  <label class="mode-option" id="bg-mode-option-single">
+                    <input type="radio" name="bg-chat-mode" value="single" id="bg-chat-mode-single" checked>
+                    <span>Single Sequence</span>
+                  </label>
+                  <label class="mode-option" id="bg-mode-option-folder">
+                    <input type="radio" name="bg-chat-mode" value="folder" id="bg-chat-mode-folder">
+                    <span>Folder Sequences</span>
+                  </label>
+                  <label class="mode-option" id="bg-mode-option-evachat">
+                    <input type="radio" name="bg-chat-mode" value="eva_chat_flow" id="bg-chat-mode-evachat">
+                    <span>EVAChat Flow</span>
+                  </label>
+                  <label class="mode-option" id="bg-mode-option-api">
+                    <input type="radio" name="bg-chat-mode" value="api_chat" id="bg-chat-mode-api">
+                    <span>API Chat</span>
+                  </label>
+                </div>
+              </div>
+
+              <div id="bg-section-single-mode">
+                <label>
+                  <span>Message sequence</span>
+                  <textarea id="bg-sequence" rows="7" placeholder="hello how are you %username%&#10;ok i am checking. wait a bit."></textarea>
+                </label>
+              </div>
+
+              <div id="bg-section-folder-mode" style="display: none;">
+                <div class="form-actions inline">
+                  <button type="button" id="bg-load-folder" class="secondary-button">Load Folder</button>
+                  <button type="button" id="bg-clean-loaded" class="danger-button">Clean Loaded</button>
+                  <span id="bg-loaded-status" class="status-line">0 sequences loaded</span>
+                </div>
+              </div>
+
+              <div id="bg-section-evachat-mode" style="display: none;">
+                <div class="form-actions inline">
+                  <button type="button" id="bg-open-eva" class="secondary-button">Open EVAChat Data Folder</button>
+                  <span id="bg-eva-status" class="status-line">TXT data is initialized on first run.</span>
+                </div>
+                <p class="hint-text">Pure TXT flow: the reply pools in this folder decide every line. No AI is used in this mode — switch to <strong>API Chat</strong> for model-written replies.</p>
+              </div>
+
+              <div id="bg-section-api-mode" style="display: none;">
+                <div class="form-actions inline">
+                  <button type="button" id="bg-open-api" class="secondary-button">Open API Chat Data Folder</button>
+                  <span id="bg-api-data-status" class="status-line">Auto-loaded from apichat.exe</span>
+                </div>
+                <p class="hint-text">Every line is written by the model. API Key, Base URL, Model, Temperature, Share Turns, and Persona Prompt are loaded automatically from <strong>apichat.exe</strong>. Only enter your Snap / Telegram usernames below.</p>
+              </div>
+
+              <label>
+                <span>Snap / Telegram users</span>
+                <textarea id="bg-usernames" rows="3" placeholder="@snap_user_one&#10;telegram_user_two"></textarea>
+              </label>
+              <div class="form-actions inline">
+                <button type="button" id="bg-save-message" class="primary-button">Save Message Mode</button>
+                <span id="bg-message-save-status" class="status-line" role="status" aria-live="polite"></span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="bg-settings">
+          <div class="subpage">
+            <section class="card">
+              <h2>4 · Bot Settings</h2>
+              <div class="form-grid two-column">
+                <label>
+                  <span>First-message policy</span>
+                  <select id="bg-first-mode">
+                    <option value="bot">Bot first</option>
+                    <option value="user">User first</option>
+                    <option value="random">Random</option>
+                  </select>
+                </label>
+                <div id="bg-first-percent-row" hidden>
+                  <label>
+                    <span>Bot first chance (%)</span>
+                    <input type="number" id="bg-first-percent" min="0" max="100" step="1" value="70">
+                  </label>
+                </div>
+                <div id="bg-first-wait-row" hidden>
+                  <label>
+                    <span>Wait for first message</span>
+                    <select id="bg-first-wait">
+                      <option value="unlimited">Wait indefinitely</option>
+                      <option value="skip">Skip after timeout</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="bg-first-timeout-row" class="form-grid two-column card-wide" hidden>
+                  <label>
+                    <span>First timeout min (s)</span>
+                    <input type="number" id="bg-first-min" min="1" max="86400" step="1" value="30">
+                  </label>
+                  <label>
+                    <span>First timeout max (s)</span>
+                    <input type="number" id="bg-first-max" min="1" max="86400" step="1" value="60">
+                  </label>
+                </div>
+              </div>
+              <div class="form-grid two-column">
+                <label><span>Poll min (s)</span><input type="number" id="bg-poll-min" min="1" max="86400" step="1"></label>
+                <label><span>Poll max (s)</span><input type="number" id="bg-poll-max" min="1" max="86400" step="1"></label>
+                <label><span>Action min (s)</span><input type="number" id="bg-action-min" min="1" max="86400" step="1"></label>
+                <label><span>Action max (s)</span><input type="number" id="bg-action-max" min="1" max="86400" step="1"></label>
+                <label><span>Skip timeout min (s)</span><input type="number" id="bg-skip-min" min="0" max="86400" step="1"></label>
+                <label><span>Skip timeout max (s)</span><input type="number" id="bg-skip-max" min="0" max="86400" step="1"></label>
+                <label><span>Chat closed wait min (s)</span><input type="number" id="bg-close-min" min="0" max="86400" step="1"></label>
+                <label><span>Chat closed wait max (s)</span><input type="number" id="bg-close-max" min="0" max="86400" step="1"></label>
+                <label><span>Worker reply delay min (s)</span><input type="number" id="bg-reply-min" min="0" max="86400" step="1"></label>
+                <label><span>Worker reply delay max (s)</span><input type="number" id="bg-reply-max" min="0" max="86400" step="1"></label>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="subpanel" data-subpanel="bg-logs">
+          <div class="subpage">
+            <section class="card log-card">
+              <div class="log-header">
+                <h2>5 · Live Logs</h2>
+                <div class="log-tools">
+                  <select id="bg-log-filter" aria-label="Filter background bot logs">
+                    <option value="all">All</option>
+                    <option value="sms">SMS</option>
+                    <option value="rules">Rules</option>
+                    <option value="errors">Errors</option>
+                  </select>
+                  <button type="button" id="bg-log-clear" class="secondary-button">Clear</button>
+                </div>
+              </div>
+              <div id="bg-log-list" class="log-list" aria-live="polite"></div>
+              <p id="bg-log-empty" class="hint-text">No activity yet. Press Save &amp; Start Bot.</p>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js?v=7"></script>
+</body>
+</html>

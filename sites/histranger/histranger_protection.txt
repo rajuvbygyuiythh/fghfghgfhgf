@@ -1,0 +1,32 @@
+====================================================================
+SITE PROTECTION & INTELLIGENCE NOTE: HiStranger.lol (1v1 Anonymous) (histranger)
+====================================================================
+Site ID            : histranger
+Site Name          : HiStranger.lol (1v1 Anonymous)
+Engine Family      : family_a
+Account Setup Mode : auto_register
+Target Start URL   : https://histranger.lol/en/chat
+Auth Mode          : dom_only
+
+1. ONBOARDING & GUEST ENTRY FLOW
+--------------------------------------------------------------------
+Your name -> 18+ safety checkbox -> Start chatting -> Find a chat partner
+- Auto-Onboard Agent in dom_driver.js automatically ticks 18+ checkboxes,
+  selects Female/Woman/Girl, fills a natural female guest alias + age 21
+  if prompted, and clicks Start / New Chat.
+
+2. ANTI-BOT & PROTECTION DETAILS
+--------------------------------------------------------------------
+No account, no ads, RAM-only 1-on-1 messages. Instant report button; keep friendly natural conversation flow.
+
+3. SAFE BOT OPERATION RULES (FOR FUTURE WORK)
+--------------------------------------------------------------------
+- Recommended Reply Delay : 2.0s – 5.0s (configured in Dashboard Show Mode).
+- Username / Snap Sharing : Share only on later turns or when asked (EVAChat /
+                            API Chat funnel handles this automatically).
+- Selector Auto-Recovery  : If this site updates its HTML layout, run
+                            source_code/capture/run.bat or skills/dom_auto_scout.js
+                            to refresh selectors in sites/histranger/site.json.
+- Isolated Accounts Path  : sites/histranger/accounts/
+- Isolated Profile Path   : sites/histranger/profiles/default/
+====================================================================

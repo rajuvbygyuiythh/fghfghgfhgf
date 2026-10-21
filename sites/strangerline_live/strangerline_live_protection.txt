@@ -1,0 +1,32 @@
+====================================================================
+SITE PROTECTION & INTELLIGENCE NOTE: StrangerLine.live (1v1 Chat) (strangerline_live)
+====================================================================
+Site ID            : strangerline_live
+Site Name          : StrangerLine.live (1v1 Chat)
+Engine Family      : family_b
+Account Setup Mode : browser_setup
+Target Start URL   : https://strangerline.live/
+Auth Mode          : dom_only
+
+1. ONBOARDING & GUEST ENTRY FLOW
+--------------------------------------------------------------------
+18+ Guest Form -> Text Chat -> Start
+- Auto-Onboard Agent in dom_driver.js automatically ticks 18+ checkboxes,
+  selects Female/Woman/Girl, fills a natural female guest alias + age 21
+  if prompted, and clicks Start / New Chat.
+
+2. ANTI-BOT & PROTECTION DETAILS
+--------------------------------------------------------------------
+Mirror domain of StrangerLine; AI real-time message filter + Turnstile on initial entry.
+
+3. SAFE BOT OPERATION RULES (FOR FUTURE WORK)
+--------------------------------------------------------------------
+- Recommended Reply Delay : 2.0s – 5.0s (configured in Dashboard Show Mode).
+- Username / Snap Sharing : Share only on later turns or when asked (EVAChat /
+                            API Chat funnel handles this automatically).
+- Selector Auto-Recovery  : If this site updates its HTML layout, run
+                            source_code/capture/run.bat or skills/dom_auto_scout.js
+                            to refresh selectors in sites/strangerline_live/site.json.
+- Isolated Accounts Path  : sites/strangerline_live/accounts/
+- Isolated Profile Path   : sites/strangerline_live/profiles/default/
+====================================================================

@@ -1,0 +1,25 @@
+{
+  "id": "echat",
+  "name": "E-Chat.co (Zero-Signup DM Chat)",
+  "family": "family_d",
+  "account_mode": "auto_register",
+  "enabled": true,
+  "start_url": "https://www.e-chat.co/",
+  "app_url": "https://www.e-chat.co/",
+  "auth_mode": "dom_only",
+  "entry_flow": "Enter guest nickname -\u003e Join room -\u003e Click user in sidebar for 1-on-1 DM",
+  "protection_summary": "Zero-signup WebSocket chat with persistent DM tab bar.",
+  "selectors": {
+    "composer_input": "textarea:not([disabled]), input#content:not([disabled]), input#message_content:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"say\" i]:not([disabled])",
+    "send_button": "button#submit_button, button[type=\"submit\"], button.send_btn, input[type=\"submit\"]",
+    "skip_button": "button.disconnect, button.next-stranger, button.skip-btn, a.leave",
+    "start_button": "button.start-chat, button#start, input[type=\"submit\"], button.connect",
+    "message_history": "#chat_logs_container, .chat-logs, .messages, .logbox, #messages, main",
+    "message_row": ".chat_log, .logitem, .message-row, .msg-item, li",
+    "message_text": ".my_text, .chat_message, .message-text, p, span",
+    "partner_message_selector": ".other_user, .strangermsg, .partner, .incoming, .them",
+    "own_message_selector": ".me_user, .youmsg, .self, .outgoing, .mine",
+    "partner_name": ".private_target, .partner-name, .stranger-name",
+    "chat_ended_text": "disconnected|ended the chat|left the conversation"
+  }
+}

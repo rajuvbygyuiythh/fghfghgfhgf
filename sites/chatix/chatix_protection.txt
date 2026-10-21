@@ -1,0 +1,32 @@
+====================================================================
+SITE PROTECTION & INTELLIGENCE NOTE: Chatix.chat (Modern Chatib Rebuild) (chatix)
+====================================================================
+Site ID            : chatix
+Site Name          : Chatix.chat (Modern Chatib Rebuild)
+Engine Family      : family_c
+Account Setup Mode : auto_register
+Target Start URL   : https://chatix.chat/
+Auth Mode          : dom_only
+
+1. ONBOARDING & GUEST ENTRY FLOW
+--------------------------------------------------------------------
+Pick handle + Age 21 + Gender: Female + Country -> Start (20s guest entry)
+- Auto-Onboard Agent in dom_driver.js automatically ticks 18+ checkboxes,
+  selects Female/Woman/Girl, fills a natural female guest alias + age 21
+  if prompted, and clicks Start / New Chat.
+
+2. ANTI-BOT & PROTECTION DETAILS
+--------------------------------------------------------------------
+No VIP paywall, no ads inside chat window, automated enforcement with transparent 24h max IP blocks.
+
+3. SAFE BOT OPERATION RULES (FOR FUTURE WORK)
+--------------------------------------------------------------------
+- Recommended Reply Delay : 2.0s – 5.0s (configured in Dashboard Show Mode).
+- Username / Snap Sharing : Share only on later turns or when asked (EVAChat /
+                            API Chat funnel handles this automatically).
+- Selector Auto-Recovery  : If this site updates its HTML layout, run
+                            source_code/capture/run.bat or skills/dom_auto_scout.js
+                            to refresh selectors in sites/chatix/site.json.
+- Isolated Accounts Path  : sites/chatix/accounts/
+- Isolated Profile Path   : sites/chatix/profiles/default/
+====================================================================

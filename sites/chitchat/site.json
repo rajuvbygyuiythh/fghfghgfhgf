@@ -1,0 +1,19 @@
+{
+  "id": "chitchat",
+  "name": "ChitChat.gg",
+  "account_mode": "browser_setup",
+  "enabled": true,
+  "start_url": "https://app.chitchat.gg/text?auth=email",
+  "app_url": "https://app.chitchat.gg/",
+  "api_base_url": "https://api.chitchat.gg",
+  "auth_mode": "chitchat_jwt",
+  "selectors": {
+    "composer_input": "[data-chat-composer=\"true\"] textarea[aria-label=\"Send a message\"]",
+    "skip_button": "[data-chat-composer=\"true\"] button[aria-keyshortcuts=\"Escape\"]",
+    "start_button": "button",
+    "message_history": "ol[aria-label=\"Message history\"]",
+    "message_row": "li[data-message-id]",
+    "message_text": "p[data-from]",
+    "partner_name": "[data-conversation-header] button[aria-label^=\"View @\"]"
+  }
+}

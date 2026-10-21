@@ -1,0 +1,25 @@
+{
+  "id": "tws_chat",
+  "name": "TalkWithStranger (Web Chat App)",
+  "family": "family_c",
+  "account_mode": "auto_register",
+  "enabled": true,
+  "start_url": "https://chat.talkwithstranger.com/",
+  "app_url": "https://chat.talkwithstranger.com/",
+  "auth_mode": "dom_only",
+  "entry_flow": "Optional nickname -\u003e Join Random Chat or Private 1-1",
+  "protection_summary": "No email/phone required; supports group rooms and 1-on-1 private chats.",
+  "selectors": {
+    "composer_input": "textarea:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"write\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"type\" i]:not([disabled]), #msg-input, #chat-input",
+    "send_button": "button[type=\"submit\"], button.send, button#send-btn, button[aria-label*=\"Send\" i], .send-button",
+    "skip_button": "button.skip, button.next, button.leave-chat, button[aria-label*=\"Close\" i], button[aria-label*=\"Skip\" i]",
+    "start_button": "button[type=\"submit\"], button.start-chat, button.enter-chat, a.start-chat, button.random-chat",
+    "message_history": ".private-chat-messages, .dm-messages, .chat-messages, .message-area, .chat-history, .logbox, main",
+    "message_row": ".msg, .message, .chat-line, .dm-row, .message-row, li",
+    "message_text": ".msg-text, .message-body, .text, p, span",
+    "partner_message_selector": ".incoming, .received, .from-them, .other-msg, .strangermsg, .left",
+    "own_message_selector": ".outgoing, .sent, .from-me, .my-msg, .youmsg, .right",
+    "partner_name": ".dm-partner-name, .active-chat-user, .stranger-name, .partner-name",
+    "chat_ended_text": "user is offline|conversation ended|stranger disconnected|has left the room"
+  }
+}
