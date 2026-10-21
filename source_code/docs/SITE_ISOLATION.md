@@ -176,6 +176,26 @@ Every site is classified into one of five execution groups stored inside `sites/
   - Any step failure is logged inside the site's own `sites/<site_id>/logs/recipe.jsonl` and `sites/<site_id>/logs/debug.jsonl`, updates the failed group's statistics, and automatically triggers fallback along `B → C → D → E` (or `A → B → C → D → E`).
   - Successful setups update the recipe's `success_rate`, `learning.verified_sites`, `learning.learned_endpoints`, `learning.learned_selectors`, and per-step `step_metrics` inside `sites/_recipes/group_<X>.json`.
 
+## Phase 5 — Isolated Site Runner Supervisor (`internal/runner/supervisor.go`)
+
+- `runner.Supervisor` manages per-site goroutines, each with its own `context.Context`, its own `sites.SiteContext` (`sites/<site_id>/`), and its own `recover()` crash barrier.
+- **Absolute Crash Isolation**: If one site panics or crashes, only that site is marked `"failed"` (`LastErrorType = "crash"`), its stack trace is logged to `sites/<site_id>/logs/errors.jsonl`, and all other running sites continue uninterrupted.
+- **8 Supervisor Methods** (exposed on both `*runner.Supervisor` and `*main.App`):
+  - `StartSite(siteID)` — start isolated goroutine for one site
+  - `StopSite(siteID)` — clean stop for one site
+  - `StartSelected(siteIDs)` — start multiple selected sites in parallel
+  - `StopAll()` — stop all running sites cleanly
+  - `GetStatus(siteID)` — current status, error counters, and chat statistics
+  - `GetAllStatuses()` — map of all tracked sites' `SiteStatus`
+  - `PauseSite(siteID, reason)` — pause a site runner with a reason
+  - `RestartSite(siteID)` — clean stop + start with incremented `RestartCount`
+- **5 Consecutive Error Auto-Pause & 6 Error Classifications**:
+  - Classifies errors into `connection`, `auth expired`, `banned`, `captcha`, `timeout`, and `crash`.
+  - Logs every error strictly to `sites/<site_id>/logs/errors.jsonl`, `sites/<site_id>/logs/runner.jsonl`, and `sites/<site_id>/logs/debug.jsonl`.
+  - Automatically pauses a site (`AutoPaused: true`) and notifies the UI (`ui:runner-notification`) when `ConsecutiveErrors` reaches `5`.
+- **Integration with `internal/bot` & `internal/browser`**:
+  - Executes `bot/` chat logic (`sequence`, `folder`, `evachat`, `apichat`) rooted at `sites/<site_id>/` and connects via `browser.Backend` using `sites/<site_id>/profiles/<profile>/browser` as `UserDataDir`.
+
 ## Boundaries of this phase
 
 - The site **catalog** (`sites/<id>/site.json`, `dom_driver.js`, `README.txt`) is

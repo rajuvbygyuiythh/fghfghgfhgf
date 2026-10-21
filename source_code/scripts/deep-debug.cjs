@@ -169,7 +169,7 @@ function runDeepDiagnostics() {
     );
   }
 
-  // Step 5: Standalone apichat.exe Studio & Reply Engine Files
+  // Step 5: Standalone apichat.exe Studio & Multi-Site Runner Supervisor Files
   const studioFiles = [
     "cmd/apichat/main.go",
     "cmd/apichat/ui/index.html",
@@ -178,19 +178,22 @@ function runDeepDiagnostics() {
     "internal/sites/autoreg.go",
     "internal/sites/session_store.go",
     "internal/sites/diagnostics.go",
+    "internal/sites/classification.go",
+    "internal/sites/recipes.go",
+    "internal/runner/supervisor.go",
   ];
   const missingStudio = studioFiles.filter((f) => !fs.existsSync(path.join(sourceRoot, f)));
   if (missingStudio.length === 0) {
     addStep(
       5,
-      "API Chat Studio & Multi-Site Diagnostics Engine",
+      "API Chat Studio, Recipe Engine & Isolated Site Runner Supervisor",
       "PASS",
-      "All core Go & UI files for apichat.exe, autoreg.go, and diagnostics.go present",
+      "All core Go & UI files for apichat.exe, classification.go, recipes.go, and runner/supervisor.go present",
     );
   } else {
     addStep(
       5,
-      "API Chat Studio & Multi-Site Diagnostics Engine",
+      "API Chat Studio, Recipe Engine & Isolated Site Runner Supervisor",
       "FAIL",
       `Missing: ${missingStudio.join(", ")}`,
     );

@@ -21,6 +21,7 @@ import (
 	"chitchatbot/internal/memory"
 	"chitchatbot/internal/model"
 	"chitchatbot/internal/proxy"
+	"chitchatbot/internal/runner"
 	"chitchatbot/internal/settings"
 	"chitchatbot/internal/sites"
 	"chitchatbot/internal/store"
@@ -33,6 +34,7 @@ type App struct {
 	dataDir         string
 	uiStore         *uistore.Store
 	globalSettings  *settings.Store
+	supervisor      *runner.Supervisor
 	mu              sync.Mutex
 	localTestMu     sync.Mutex
 	localTest       *bot.LocalChatSession
@@ -96,6 +98,26 @@ func (a *App) settingsStore() *settings.Store {
 	}
 	a.globalSettings = st
 	return st
+}
+
+// runnerSupervisor returns the isolated multi-site runner Supervisor, creating it
+// lazily under a.mu so tests constructing App without NewApp work safely.
+func (a *App) runnerSupervisor() *runner.Supervisor {
+	st := a.settingsStore()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.supervisor != nil {
+		return a.supervisor
+	}
+	a.supervisor = runner.NewSupervisor(runner.Options{
+		DataDir:       a.dataDir,
+		SettingsStore: st,
+		NotifyFunc: func(n runner.Notification) {
+			a.log(n.Level, fmt.Sprintf("[supervisor:%s] %s: %s", n.SiteID, n.Event, n.Reason))
+			a.emit("ui:runner-notification", n)
+		},
+	})
+	return a.supervisor
 }
 
 // globalSettingsFromUIStore builds a settings.Settings snapshot from the values
@@ -375,6 +397,46 @@ func (a *App) RunSiteRecipe(siteID, group string) (sites.RecipeExecutionResult, 
 		res.SuccessRate,
 	))
 	return res, nil
+}
+
+// StartSite starts an isolated runner goroutine for siteID.
+func (a *App) StartSite(siteID string) error {
+	return a.runnerSupervisor().StartSite(siteID)
+}
+
+// StopSite cleanly stops the isolated runner goroutine for siteID.
+func (a *App) StopSite(siteID string) error {
+	return a.runnerSupervisor().StopSite(siteID)
+}
+
+// StartSelected starts multiple isolated site runner goroutines in parallel.
+func (a *App) StartSelected(siteIDs []string) error {
+	return a.runnerSupervisor().StartSelected(siteIDs)
+}
+
+// StopAll cleanly stops all active site runner goroutines.
+func (a *App) StopAll() error {
+	return a.runnerSupervisor().StopAll()
+}
+
+// GetStatus returns the current runner status and statistics for siteID.
+func (a *App) GetStatus(siteID string) (runner.SiteStatus, error) {
+	return a.runnerSupervisor().GetStatus(siteID)
+}
+
+// GetAllStatuses returns the status map for all tracked site runners.
+func (a *App) GetAllStatuses() map[string]runner.SiteStatus {
+	return a.runnerSupervisor().GetAllStatuses()
+}
+
+// PauseSite pauses a site runner with a reason.
+func (a *App) PauseSite(siteID, reason string) error {
+	return a.runnerSupervisor().PauseSite(siteID, reason)
+}
+
+// RestartSite cleanly stops and restarts the isolated runner for siteID.
+func (a *App) RestartSite(siteID string) error {
+	return a.runnerSupervisor().RestartSite(siteID)
 }
 
 func (a *App) ListSites() ([]model.SiteOption, error) {

@@ -1,6 +1,6 @@
 {
   "overall_status": "PASS",
-  "checked_at": "2026-10-21T21:08:34.639Z",
+  "checked_at": "2026-10-21T22:05:40.325Z",
   "total_sites": 102,
   "auto_register_sites": 86,
   "browser_setup_sites": 16,
@@ -31,9 +31,9 @@
     },
     {
       "step": 5,
-      "name": "API Chat Studio & Multi-Site Diagnostics Engine",
+      "name": "API Chat Studio, Recipe Engine & Isolated Site Runner Supervisor",
       "status": "PASS",
-      "detail": "All core Go & UI files for apichat.exe, autoreg.go, and diagnostics.go present"
+      "detail": "All core Go & UI files for apichat.exe, classification.go, recipes.go, and runner/supervisor.go present"
     }
   ]
 }

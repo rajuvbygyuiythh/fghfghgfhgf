@@ -56,6 +56,22 @@ export function GetSetupRecipe(arg1:string):Promise<any>;
 
 export function RunSiteRecipe(arg1:string,arg2:string):Promise<any>;
 
+export function StartSite(arg1:string):Promise<void>;
+
+export function StopSite(arg1:string):Promise<void>;
+
+export function StartSelected(arg1:Array<string>):Promise<void>;
+
+export function StopAll():Promise<void>;
+
+export function GetStatus(arg1:string):Promise<any>;
+
+export function GetAllStatuses():Promise<Record<string, any>>;
+
+export function PauseSite(arg1:string,arg2:string):Promise<void>;
+
+export function RestartSite(arg1:string):Promise<void>;
+
 export function LoadMessageFolder():Promise<Array<string>>;
 
 export function OpenAPIChatDataFolder():Promise<string>;
