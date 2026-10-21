@@ -6,21 +6,22 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"chitchatbot/internal/appdirs"
 )
 
 // All app, standard-library and Wails writers share this lock, even if their
 // Logger values differ. O_APPEND also avoids truncating earlier sessions.
 var appendMu sync.Mutex
 
-// Path returns the shared application log inside <dataDir>/_global/logs.txt.
+// Path returns the shared application log inside <sites-root>/_global/logs.txt.
 // Site-specific logs stay inside each site folder; this file is application
 // diagnostics only.
-func Path(dataDir string) string { return filepath.Join(dataDir, "_global", "logs.txt") }
+func Path(dataDir string) string { return appdirs.LogsFile(dataDir) }
 
 type Entry struct {
 	Time    string `json:"time"`

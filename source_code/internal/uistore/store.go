@@ -12,6 +12,7 @@ import (
 
 	badger "github.com/dgraph-io/badger/v4"
 
+	"chitchatbot/internal/appdirs"
 	"chitchatbot/internal/model"
 	"chitchatbot/internal/store"
 )
@@ -27,14 +28,13 @@ const (
 	messageMirrorFile = "message_settings.json"
 )
 
-// globalUIRoot is the only shared directory: <dataDir>/_global/ui.
-func globalUIRoot(baseDir string) string {
-	return filepath.Join(baseDir, globalDirName, "ui")
-}
+// globalUIRoot is the only shared directory: <sites-root>/_global/ui.
+func globalUIRoot(baseDir string) string { return appdirs.UIDir(baseDir) }
 
-// migrateLegacyUI moves the old <dataDir>/ui tree into <dataDir>/_global/ui
-// once. Existing settings are preserved; failures are non-fatal because the new
-// location is still created below.
+// migrateLegacyUI moves a pre-Phase-1 <dataDir>/ui tree into the shared
+// _global/ui once. A Phase-1 <dataDir>/_global tree is moved by
+// appdirs.EnsureGlobalDirs before this runs. Existing settings are preserved;
+// failures are non-fatal because the new location is still created below.
 func migrateLegacyUI(baseDir string) {
 	legacy := filepath.Join(baseDir, "ui")
 	target := globalUIRoot(baseDir)
@@ -59,6 +59,9 @@ type Store struct {
 }
 
 func Open(baseDir string) (*Store, error) {
+	if err := appdirs.EnsureGlobalDirs(baseDir); err != nil {
+		return nil, err
+	}
 	migrateLegacyUI(baseDir)
 	dbDir := filepath.Join(globalUIRoot(baseDir), "badger")
 	if err := store.EnsureDir(dbDir); err != nil {

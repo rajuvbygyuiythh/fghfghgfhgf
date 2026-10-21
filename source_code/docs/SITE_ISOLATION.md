@@ -1,34 +1,36 @@
-# Phase 1 — Site folder isolation (foundation)
+# Phase 1 & Phase 2 — Site folder isolation + Global Settings
 
 Completed source update: 2026-10-21 (owner timezone).
 
 Owner requirement: the app ships 102 sites. Every site must own a real folder that
 holds its browser profile, saved session, cookies, accounts and logs. One site's
 code must never read or write another site's folder. The only shared directory is
-`_global/`, used for application settings.
+`sites/_global/`, used for application settings (`sites/_global/settings.json`).
 
 ## Resulting layout
 
 ```
-<project>/                       # folder that contains wails.json
-├─ data/
-│  └─ _global/                   # SHARED, application-wide only
-│     ├─ ui/                     # Badger DB + message_settings.json mirror
-│     ├─ logs.txt                # desktop/app diagnostics (JSON lines)
-│     ├─ memory/                 # chat_history.jsonl, operation_memory.json
-│     └─ settings/               # reserved for cross-site preferences
-└─ sites/                        # 102 site folders, one per site, no sharing
-   ├─ chitchat/                  # the default site also gets a real folder
+<project>/                       # repository root (or <dataDir> in portable mode)
+└─ sites/                        # canonical sites root (appdirs.SitesRoot)
+   ├─ _global/                   # THE ONLY SHARED FOLDER
+   │  ├─ settings.json           # global settings (message_mode, proxy, reply_delay, skip_timeout, first_message, api)
+   │  ├─ ui/                     # Badger DB + message_settings.json mirror
+   │  ├─ logs.txt                # desktop/app diagnostics (JSON lines)
+   │  ├─ logs/                   # structured global debug mirrors
+   │  ├─ memory/                 # chat_history.jsonl, operation_memory.json
+   │  └─ settings/               # reserved for cross-site preferences
+   ├─ chitchat/                  # the default site also gets a real folder (1 of 102)
    │  ├─ site.json
    │  ├─ dom_driver.js
    │  ├─ README.txt
    │  ├─ chitchat_protection.txt
+   │  ├─ settings_override.json  # optional per-site override (only when customised)
    │  ├─ accounts/               # accounts/<profile>.json + saved credentials
    │  ├─ profiles/<profile>/     # Chromium user-data dir + login_info*.json
    │  ├─ sessions/               # latest_session.json, session_<profile>.json
    │  └─ logs/                   # debug.jsonl, last_diagnostics.json
    ├─ omezy/
-   └─ … 99 more
+   └─ … 100 more (102 isolated site folders total)
 ```
 
 `<project>/sites` is reused when it already exists next to `data/`; otherwise the
@@ -122,9 +124,22 @@ Run the suite:
 
 ```
 go build ./... && go vet ./...
-go test ./... ./internal/sites/... -count=1
-go test -race ./internal/sites/ ./internal/memory/ ./internal/uistore/ ./internal/applog/ .
+go test ./... -count=1
+go test -race ./internal/sites/ ./internal/settings/ ./internal/appdirs/ ./internal/memory/ ./internal/uistore/ ./internal/applog/ .
 ```
+
+## Phase 2 — Global Settings Store & Per-Site Overrides (`internal/settings`)
+
+- `sites/_global/settings.json` holds the global defaults shared across all 102 sites:
+  - `message_mode` (`single`, `folder`, `eva_chat_flow`, `api_chat`)
+  - `proxy` (`enabled`, `entries`)
+  - `reply_delay` (`min_seconds`, `max_seconds`)
+  - `skip_timeout` (`min_seconds`, `max_seconds`)
+  - `first_message` (`mode`, `bot_first_percent`, `wait_timeout`, `wait_min_seconds`, `wait_max_seconds`)
+  - `api` (`enabled`, `base_url`, `api_key`, `model`, `temperature`)
+- `sites/<site_id>/settings_override.json` (resolved through `sites.NewSiteContext`) holds optional pointer fields (`Override`). Any `nil` field inherits from `sites/_global/settings.json`; any non-`nil` field overrides that section for that site only.
+- `settings.Merge(global, override)` computes `Effective{Settings, SiteID, Sources}` without mutating its inputs.
+- Saving settings from the dashboard (`SaveMessageSettings`, `SaveProxySettings`, `SaveGeneralSettings`, `SaveUnifiedSettings`, or `SaveGlobalSettings`) updates `sites/_global/settings.json` atomically (`writeJSONAtomic` with `0600` permissions) and immediately applies to all sites that have not overridden that section.
 
 ## Boundaries of this phase
 

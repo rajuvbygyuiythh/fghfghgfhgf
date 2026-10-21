@@ -27,6 +27,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"chitchatbot/internal/appdirs"
 )
 
 const (
@@ -435,19 +437,14 @@ func newSiteContextAtRoot(sitesRoot, siteID string) (SiteContext, error) {
 //
 // Workspace layout (source checkout):
 //
-//	<repo>/sites/<site_id>/       <- configs and runtime site data
-//	<repo>/source_code/data/_global/
+//	<repo>/sites/<site_id>/            <- configs and runtime site data
+//	<repo>/sites/_global/              <- the only shared folder
 //
 // Portable layout (installed app):
 //
 //	<dataDir>/sites/<site_id>/
-//	<dataDir>/_global/
-func SitesRoot(dataDir string) string {
-	if root := workspaceSitesRoot(dataDir); root != "" {
-		return root
-	}
-	return filepath.Join(dataDir, SitesDirName)
-}
+//	<dataDir>/sites/_global/
+func SitesRoot(dataDir string) string { return appdirs.SitesRoot(dataDir) }
 
 // RootDir is kept for compatibility with earlier callers. It now returns the
 // same single canonical root as SitesRoot.
@@ -459,64 +456,24 @@ func RootDir(dataDir string) string { return SitesRoot(dataDir) }
 // Deprecated: use SitesRoot.
 func ExternalRootDir(dataDir string) string { return SitesRoot(dataDir) }
 
-// GlobalDir returns the only shared directory: <dataDir>/_global.
-func GlobalDir(dataDir string) string {
-	return filepath.Join(filepath.Clean(dataDir), GlobalDirName)
-}
+// GlobalDir returns the only shared directory: <sites-root>/_global. It sits
+// next to the site folders, never inside one of them.
+func GlobalDir(dataDir string) string { return appdirs.GlobalDir(dataDir) }
 
-// GlobalPath resolves a relative path under _global/.
+// GlobalPath resolves a relative path under _global/. Untrusted input is
+// validated by SafeJoin, exactly like site paths.
 func GlobalPath(dataDir, rel string) (string, error) {
 	return SafeJoin(GlobalDir(dataDir), rel)
 }
 
-// EnsureGlobalDirs creates the shared settings directory tree.
-func EnsureGlobalDirs(dataDir string) error {
-	for _, name := range []string{"", "ui", "logs", "memory", "settings"} {
-		if err := os.MkdirAll(filepath.Join(GlobalDir(dataDir), name), 0o700); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func workspaceSitesRoot(dataDir string) string {
-	abs, err := filepath.Abs(filepath.Clean(dataDir))
-	if err != nil {
-		return ""
-	}
-	parent := filepath.Dir(abs)
-	grand := filepath.Dir(parent)
-	candidates := []string{
-		filepath.Join(parent, SitesDirName),
-		filepath.Join(grand, SitesDirName),
-	}
-	for _, candidate := range candidates {
-		if isSitesRoot(candidate) {
-			return candidate
-		}
-	}
-	return ""
-}
-
-func isSitesRoot(dir string) bool {
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(dir, entry.Name(), "site.json")); err == nil {
-			return true
-		}
-	}
-	return false
-}
+// EnsureGlobalDirs creates the shared directory tree:
+//
+//	_global/settings.json   (created by the settings store, not here)
+//	_global/ui/             Badger DB + message settings mirror
+//	_global/logs/           structured per-site debug mirrors
+//	_global/logs.txt        application diagnostics
+//	_global/memory/         chat history / operation memory
+func EnsureGlobalDirs(dataDir string) error { return appdirs.EnsureGlobalDirs(dataDir) }
 
 // SafeJoin joins root and rel and proves the result stays under root. It is the
 // single path-safety primitive used by every site file operation.

@@ -161,10 +161,10 @@ func TestKnownCredentialsRedactedButErrorContextKept(t *testing.T) {
 
 func TestPathInsideGlobalDir(t *testing.T) {
 	root := t.TempDir()
-	if got := Path(filepath.Join(root, "data")); got != filepath.Join(root, "data", "_global", "logs.txt") {
+	if got := Path(filepath.Join(root, "data")); got != filepath.Join(root, "data", "sites", "_global", "logs.txt") {
 		t.Fatal(got)
 	}
-	if got := Path("data"); got != filepath.Join("data", "_global", "logs.txt") {
+	if got := Path("data"); got != filepath.Join("data", "sites", "_global", "logs.txt") {
 		t.Fatal(got)
 	}
 }

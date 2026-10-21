@@ -1,9 +1,20 @@
 # Runtime data and private state (never commit)
-data/
-_global/
+/data/
+/_global/
+source_code/data/
 *.tmp
 logs.txt
 source_code/logs.txt
+sites/_global/logs.txt
+sites/_global/ui/*
+!sites/_global/ui/.gitkeep
+sites/_global/logs/*
+!sites/_global/logs/.gitkeep
+sites/_global/memory/*
+!sites/_global/memory/.gitkeep
+sites/_global/settings/*
+!sites/_global/settings/.gitkeep
+sites/*/settings_override.json
 
 # Build output and binaries
 build/

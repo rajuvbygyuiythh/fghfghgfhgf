@@ -28,7 +28,7 @@ func TestMemoryStorePersistsChatHistoryAndOperationState(t *testing.T) {
 		t.Fatalf("unexpected site stats for omezy: %+v", st)
 	}
 
-	jsonlPath := filepath.Join(tmp, "_global", "memory", "chat_history.jsonl")
+	jsonlPath := filepath.Join(tmp, "sites", "_global", "memory", "chat_history.jsonl")
 	raw, err := os.ReadFile(jsonlPath)
 	if err != nil {
 		t.Fatalf("failed reading chat_history.jsonl: %v", err)

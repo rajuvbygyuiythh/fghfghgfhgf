@@ -208,10 +208,10 @@ func TestGlobalSettingsLiveUnderGlobalDir(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(baseDir, "ui")); !os.IsNotExist(err) {
 		t.Fatalf("legacy ui/ must not be created: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(baseDir, "_global", "ui", "badger")); err != nil {
+	if _, err := os.Stat(filepath.Join(baseDir, "sites", "_global", "ui", "badger")); err != nil {
 		t.Fatalf("badger must live in _global/ui: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(baseDir, "_global", "ui", "message_settings.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(baseDir, "sites", "_global", "ui", "message_settings.json")); err != nil {
 		t.Fatalf("mirror must live in _global/ui: %v", err)
 	}
 }

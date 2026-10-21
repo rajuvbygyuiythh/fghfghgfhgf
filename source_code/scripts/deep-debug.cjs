@@ -22,7 +22,7 @@ function runDeepDiagnostics() {
   if (fs.existsSync(sitesRoot)) {
     siteDirs = fs
       .readdirSync(sitesRoot, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
+      .filter((d) => d.isDirectory() && d.name !== "_global")
       .map((d) => d.name)
       .sort();
   }

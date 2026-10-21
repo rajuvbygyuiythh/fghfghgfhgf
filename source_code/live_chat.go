@@ -212,7 +212,7 @@ func liveSequences(settings model.MessageSettings) [][]string {
 }
 
 func (a *App) newLiveResponder() (liveResponder, string, error) {
-	settings, err := a.uiStore.LoadMessageSettings()
+	settings, err := a.effectiveMessageSettings(a.activeSiteID())
 	if err != nil {
 		return nil, "", err
 	}
@@ -316,7 +316,7 @@ func (a *App) runLiveChat(ctx context.Context, backend browser.Backend, _ model.
 		return
 	}
 	prefix := fmt.Sprintf("[%s show-live %d/%d]", profileName, index, total)
-	showSettings, err := a.uiStore.LoadShowModeSettings()
+	showSettings, err := a.effectiveShowModeSettings(a.activeSiteID())
 	if err != nil {
 		a.log("activity", prefix+" SETTINGS FAILED | could not load Reply delay settings: "+err.Error())
 		a.showModeEvent("error", "could not load Show Mode settings", "", err.Error(), false)

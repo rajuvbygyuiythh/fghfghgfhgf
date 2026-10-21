@@ -21,6 +21,7 @@ import (
 	"chitchatbot/internal/memory"
 	"chitchatbot/internal/model"
 	"chitchatbot/internal/proxy"
+	"chitchatbot/internal/settings"
 	"chitchatbot/internal/sites"
 	"chitchatbot/internal/store"
 	"chitchatbot/internal/uistore"
@@ -31,6 +32,7 @@ type App struct {
 	ctx             context.Context
 	dataDir         string
 	uiStore         *uistore.Store
+	globalSettings  *settings.Store
 	mu              sync.Mutex
 	localTestMu     sync.Mutex
 	localTest       *bot.LocalChatSession
@@ -60,10 +62,200 @@ func NewApp(dataDir string) (*App, error) {
 		_ = uiStore.Close()
 		return nil, err
 	}
+	// The sites tree must exist before the settings store resolves its root.
 	_, _ = sites.EnsureSites(dataDir)
+	settingsStore, err := settings.Open(dataDir)
+	if err != nil {
+		_ = uiStore.Close()
+		return nil, err
+	}
+	app.globalSettings = settingsStore
+	if err := app.seedGlobalSettings(); err != nil {
+		_ = uiStore.Close()
+		return nil, err
+	}
 	_, _ = uiStore.LoadMessageSettings()
 
 	return app, nil
+}
+
+// settingsStore returns the shared settings store, opening it lazily when a
+// test constructs App without NewApp.
+func (a *App) settingsStore() *settings.Store {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.globalSettings != nil {
+		return a.globalSettings
+	}
+	if strings.TrimSpace(a.dataDir) == "" {
+		return nil
+	}
+	st, err := settings.Open(a.dataDir)
+	if err != nil {
+		return nil
+	}
+	a.globalSettings = st
+	return st
+}
+
+// globalSettingsFromUIStore builds a settings.Settings snapshot from the values
+// currently stored in uistore.
+func (a *App) globalSettingsFromUIStore() (settings.Settings, error) {
+	seed := settings.Default()
+	if a.uiStore == nil {
+		return seed, nil
+	}
+	message, msgErr := a.uiStore.LoadMessageSettings()
+	proxySettings, proxyErr := a.uiStore.LoadProxySettings()
+	general, genErr := a.uiStore.LoadGeneralSettings()
+	for _, err := range []error{msgErr, proxyErr, genErr} {
+		if err != nil {
+			return seed, err
+		}
+	}
+	if mode := settings.NormalizeMessageMode(message.EffectiveChatMode()); mode != "" {
+		seed.MessageMode = mode
+	}
+	seed.Proxy = proxySettings
+	seed.ReplyDelay = settings.DurationRange{
+		MinSeconds: general.ReplyDelayMinSeconds,
+		MaxSeconds: general.ReplyDelayMaxSeconds,
+	}
+	seed.SkipTimeout = settings.DurationRange{
+		MinSeconds: general.MatchReplyTimeoutMinSeconds,
+		MaxSeconds: general.MatchReplyTimeoutMaxSeconds,
+	}
+	seed.FirstMessage = general.FirstMessage.Effective()
+	seed.API = settings.APISettings{
+		Enabled:     message.AIEnabled || strings.TrimSpace(message.AIAPIKey) != "",
+		BaseURL:     message.AIBaseURL,
+		APIKey:      message.AIAPIKey,
+		Model:       message.AIModel,
+		Temperature: message.APITemperature,
+	}
+	return seed.Normalize(), nil
+}
+
+// loadOrSeedGlobalSettings reads sites/_global/settings.json when present and
+// falls back to the current uistore values before the first global save.
+func (a *App) loadOrSeedGlobalSettings() (settings.Settings, error) {
+	st := a.settingsStore()
+	if st != nil {
+		if _, err := os.Stat(st.GlobalPath()); err == nil {
+			return st.Load()
+		}
+	}
+	return a.globalSettingsFromUIStore()
+}
+
+// seedGlobalSettings creates sites/_global/settings.json on first start from the
+// values the dashboard already stores, so an upgraded installation keeps exactly
+// the behaviour it had before global settings existed.
+func (a *App) seedGlobalSettings() error {
+	st := a.settingsStore()
+	if st == nil {
+		return nil
+	}
+	if _, err := os.Stat(st.GlobalPath()); err == nil {
+		return nil
+	}
+	seed, err := a.globalSettingsFromUIStore()
+	if err != nil {
+		return err
+	}
+	if _, err := st.Save(seed); err != nil {
+		return err
+	}
+	a.log("info", "Global settings seeded from the dashboard defaults: "+st.GlobalPath())
+	return nil
+}
+
+// effectiveSiteSettings merges the shared settings with one site's override.
+// Every read that feeds a worker must go through this.
+func (a *App) effectiveSiteSettings(siteID string) (settings.Effective, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	global, err := a.loadOrSeedGlobalSettings()
+	if err != nil {
+		return settings.Effective{}, err
+	}
+	var override settings.Override
+	if st := a.settingsStore(); st != nil {
+		override, err = st.LoadOverride(siteID)
+		if err != nil {
+			return settings.Effective{}, err
+		}
+	}
+	eff := settings.Merge(global, override)
+	eff.SiteID = strings.TrimSpace(siteID)
+	return eff, nil
+}
+
+// effectiveMessageSettings overlays global settings + site override on the
+// dashboard's stored Message form.
+func (a *App) effectiveMessageSettings(siteID string) (model.MessageSettings, error) {
+	base, err := a.uiStore.LoadMessageSettings()
+	if err != nil {
+		return model.MessageSettings{}, err
+	}
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return model.MessageSettings{}, err
+	}
+	return effective.ApplyMessageSettings(base), nil
+}
+
+// effectiveProxySettings returns the proxy that must actually be used.
+func (a *App) effectiveProxySettings(siteID string) (model.ProxySettings, error) {
+	base, err := a.uiStore.LoadProxySettings()
+	if err != nil {
+		return model.ProxySettings{}, err
+	}
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return model.ProxySettings{}, err
+	}
+	return effective.ApplyProxySettings(base), nil
+}
+
+// effectiveGeneralSettings overlays reply delay, skip timeout and the first
+// message policy on the stored worker timings.
+func (a *App) effectiveGeneralSettings(siteID string) (model.GeneralSettings, error) {
+	base, err := a.uiStore.LoadGeneralSettings()
+	if err != nil {
+		return model.GeneralSettings{}, err
+	}
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return model.GeneralSettings{}, err
+	}
+	return effective.ApplyGeneralSettings(base), nil
+}
+
+// effectiveShowModeSettings returns Show Mode's timing settings for one site,
+// applying per-site overrides on top of the stored Show Mode profile.
+func (a *App) effectiveShowModeSettings(siteID string) (model.ShowModeSettings, error) {
+	base, err := a.uiStore.LoadShowModeSettings()
+	if err != nil {
+		return model.ShowModeSettings{}, err
+	}
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return model.ShowModeSettings{}, err
+	}
+	if effective.Overridden("reply_delay") {
+		base.ReplyDelayMinSeconds = effective.Settings.ReplyDelay.MinSeconds
+		base.ReplyDelayMaxSeconds = effective.Settings.ReplyDelay.MaxSeconds
+	}
+	if effective.Overridden("skip_timeout") {
+		base.NoReplyMinSeconds = effective.Settings.SkipTimeout.MinSeconds
+		base.NoReplyMaxSeconds = effective.Settings.SkipTimeout.MaxSeconds
+	}
+	if effective.Overridden("first_message") || base.FirstMessage.Mode == "" {
+		base.FirstMessage = effective.Settings.FirstMessage
+	}
+	return base, nil
 }
 
 func (a *App) activeSiteID() string {
@@ -258,8 +450,8 @@ func (a *App) RunSiteDiagnostics(siteID string) (sites.SiteDiagnosticReport, err
 	if strings.TrimSpace(siteID) == "" {
 		siteID = a.activeSiteID()
 	}
-	msgSettings, _ := a.uiStore.LoadMessageSettings()
-	proxySettings, _ := a.uiStore.LoadProxySettings()
+	msgSettings, _ := a.effectiveMessageSettings(siteID)
+	proxySettings, _ := a.effectiveProxySettings(siteID)
 	report, err := sites.RunSiteDiagnostics(a.dataDir, siteID, msgSettings, proxySettings)
 	if err != nil {
 		return sites.SiteDiagnosticReport{}, err
@@ -333,9 +525,17 @@ func (a *App) GetInitialState() (model.UISnapshot, error) {
 		return model.UISnapshot{}, err
 	}
 
-	showSettings, err := a.uiStore.LoadShowModeSettings()
+	showSettings, err := a.effectiveShowModeSettings(a.activeSiteID())
 	if err != nil {
 		return model.UISnapshot{}, err
+	}
+
+	// The dashboard must display the values the workers will really use, i.e.
+	// global settings merged with the active site's override.
+	if effective, effErr := a.effectiveSiteSettings(a.activeSiteID()); effErr == nil {
+		messageSettings = effective.ApplyMessageSettings(messageSettings)
+		proxySettings = effective.ApplyProxySettings(proxySettings)
+		generalSettings = effective.ApplyGeneralSettings(generalSettings)
 	}
 
 	logs, err := a.uiStore.ListLogs(200)
@@ -614,8 +814,47 @@ func (a *App) SaveMessageSettings(settings model.MessageSettings) error {
 	if err := a.uiStore.SaveMessageSettings(settings); err != nil {
 		return err
 	}
+	// The Message form is the dashboard's global control: mirror the fields that
+	// belong to the shared settings file so every site without an override
+	// follows this save. A per-site override still wins for that one site.
+	a.mirrorMessageSettingsGlobal(settings)
 	a.log("info", fmt.Sprintf("Message settings saved. Mode=%s", settings.EffectiveChatMode()))
 	return nil
+}
+
+// mirrorMessageSettingsGlobal writes the global parts of the Message form into
+// sites/_global/settings.json. Errors are logged, never returned: the form value
+// has already been persisted, and a settings-file problem must not make the
+// dashboard unusable.
+func (a *App) mirrorMessageSettingsGlobal(msg model.MessageSettings) {
+	st := a.settingsStore()
+	if st == nil {
+		return
+	}
+	global, err := a.loadOrSeedGlobalSettings()
+	if err != nil {
+		a.log("warn", "Global settings unreadable; dashboard save kept local: "+err.Error())
+		return
+	}
+	if mode := settings.NormalizeMessageMode(msg.EffectiveChatMode()); mode != "" {
+		global.MessageMode = mode
+	}
+	if key := strings.TrimSpace(msg.AIAPIKey); key != "" {
+		global.API.APIKey = key
+	}
+	if base := strings.TrimSpace(msg.AIBaseURL); base != "" {
+		global.API.BaseURL = base
+	}
+	if modelName := strings.TrimSpace(msg.AIModel); modelName != "" {
+		global.API.Model = modelName
+	}
+	if msg.APITemperature > 0 {
+		global.API.Temperature = msg.APITemperature
+	}
+	global.API.Enabled = global.API.Enabled || strings.TrimSpace(global.API.APIKey) != ""
+	if _, err := st.Save(global); err != nil {
+		a.log("warn", "Global settings were not updated: "+err.Error())
+	}
 }
 
 // TestProxyEntries tests the current form without saving or exposing credentials.
@@ -647,6 +886,15 @@ func (a *App) SaveProxySettings(settings model.ProxySettings) error {
 	if err := a.uiStore.SaveProxySettings(settings); err != nil {
 		return err
 	}
+	// Proxy is a global setting too: save it for every site without an override.
+	if st := a.settingsStore(); st != nil {
+		if global, err := a.loadOrSeedGlobalSettings(); err == nil {
+			global.Proxy = settings
+			if _, saveErr := st.Save(global); saveErr != nil {
+				a.log("warn", "Global proxy settings were not updated: "+saveErr.Error())
+			}
+		}
+	}
 
 	if settings.Enabled {
 		entries, _ := proxy.ParseList(settings.Entries)
@@ -675,6 +923,7 @@ func (a *App) SaveGeneralSettings(settings model.GeneralSettings) error {
 	if err := a.uiStore.SaveGeneralSettings(settings); err != nil {
 		return err
 	}
+	a.mirrorGeneralSettingsGlobal(settings)
 	a.log("info", fmt.Sprintf(
 		"Timing settings saved. Poll=%ds-%ds Action=%ds-%ds",
 		settings.PollMinSeconds,
@@ -683,6 +932,211 @@ func (a *App) SaveGeneralSettings(settings model.GeneralSettings) error {
 		settings.ActionMaxSeconds,
 	))
 	return nil
+}
+
+// mirrorGeneralSettingsGlobal copies reply delay, skip timeout and the first
+// message policy into the shared settings file.
+func (a *App) mirrorGeneralSettingsGlobal(general model.GeneralSettings) {
+	st := a.settingsStore()
+	if st == nil {
+		return
+	}
+	global, err := a.loadOrSeedGlobalSettings()
+	if err != nil {
+		a.log("warn", "Global settings unreadable; timing save kept local: "+err.Error())
+		return
+	}
+	global.ReplyDelay = settings.DurationRange{
+		MinSeconds: general.ReplyDelayMinSeconds,
+		MaxSeconds: general.ReplyDelayMaxSeconds,
+	}
+	global.SkipTimeout = settings.DurationRange{
+		MinSeconds: general.MatchReplyTimeoutMinSeconds,
+		MaxSeconds: general.MatchReplyTimeoutMaxSeconds,
+	}
+	if general.FirstMessage.Mode != "" {
+		global.FirstMessage = general.FirstMessage.Effective()
+	}
+	if _, err := st.Save(global); err != nil {
+		a.log("warn", "Global timing settings were not updated: "+err.Error())
+	}
+}
+
+// GlobalSettingsView is what the dashboard receives for the shared settings.
+// The API key is never sent back to the UI: APIKeySet tells the form whether a
+// key is stored, and saving with an empty field keeps the stored key.
+type GlobalSettingsView struct {
+	Settings  settings.Settings `json:"settings"`
+	APIKeySet bool              `json:"api_key_set"`
+	Path      string            `json:"path"`
+	SiteCount int               `json:"site_count"`
+}
+
+func (a *App) globalSettingsView(stored settings.Settings) GlobalSettingsView {
+	view := GlobalSettingsView{
+		Settings:  settings.RedactedSettings(stored),
+		APIKeySet: stored.API.APIKey != "",
+	}
+	if st := a.settingsStore(); st != nil {
+		view.Path = st.GlobalPath()
+	}
+	if list, err := sites.List(a.dataDir); err == nil {
+		view.SiteCount = len(list)
+	}
+	return view
+}
+
+// GetGlobalSettings returns the shared settings (API key redacted).
+func (a *App) GetGlobalSettings() (GlobalSettingsView, error) {
+	stored, err := a.loadOrSeedGlobalSettings()
+	if err != nil {
+		return GlobalSettingsView{}, err
+	}
+	return a.globalSettingsView(stored), nil
+}
+
+// SaveGlobalSettings persists the shared settings. Every site without an
+// override picks them up on its next read, with no restart and no per-site file.
+func (a *App) SaveGlobalSettings(next settings.Settings) (GlobalSettingsView, error) {
+	st := a.settingsStore()
+	if st == nil {
+		return GlobalSettingsView{}, errors.New("settings store is not available")
+	}
+	stored, err := st.Save(next)
+	if err != nil {
+		return GlobalSettingsView{}, err
+	}
+	a.syncUIStoreFromGlobal(stored)
+	a.log("info", fmt.Sprintf(
+		"Global settings saved to %s (mode=%s reply=%ds-%ds skip=%ds-%ds proxy=%t).",
+		st.GlobalPath(),
+		stored.MessageMode,
+		stored.ReplyDelay.MinSeconds,
+		stored.ReplyDelay.MaxSeconds,
+		stored.SkipTimeout.MinSeconds,
+		stored.SkipTimeout.MaxSeconds,
+		stored.Proxy.Enabled,
+	))
+	a.emit("ui:global_settings_saved", true)
+	return a.globalSettingsView(stored), nil
+}
+
+// syncUIStoreFromGlobal keeps the Badger-backed UI store in lockstep when the
+// caller saves through SaveGlobalSettings directly.
+func (a *App) syncUIStoreFromGlobal(stored settings.Settings) {
+	if a.uiStore == nil {
+		return
+	}
+	effective := settings.Merge(stored, settings.Override{})
+	if msg, err := a.uiStore.LoadMessageSettings(); err == nil {
+		_ = a.uiStore.SaveMessageSettings(effective.ApplyMessageSettings(msg))
+	}
+	_ = a.uiStore.SaveProxySettings(stored.Proxy)
+	if gen, err := a.uiStore.LoadGeneralSettings(); err == nil {
+		gen = effective.ApplyGeneralSettings(gen)
+		gen.FirstMessage = stored.FirstMessage.Effective()
+		_ = a.uiStore.SaveGeneralSettings(gen)
+	}
+	if show, err := a.uiStore.LoadShowModeSettings(); err == nil {
+		show = effective.ApplyShowModeSettings(show)
+		if show.AutoSkip && show.NoReplyMinSeconds < 1 {
+			show.NoReplyMinSeconds = 1
+			if show.NoReplyMaxSeconds < show.NoReplyMinSeconds {
+				show.NoReplyMaxSeconds = show.NoReplyMinSeconds
+			}
+		}
+		_ = a.uiStore.SaveShowModeSettings(show)
+	}
+}
+
+// GetSiteSettings returns the effective settings for one site and the source of
+// every section ("global" or "site").
+func (a *App) GetSiteSettings(siteID string) (settings.Effective, error) {
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return settings.Effective{}, err
+	}
+	return effective.Redacted(), nil
+}
+
+// ListSiteSettings returns every site with its override keys and effective
+// values, so the dashboard can show which sites deviate from the global file.
+func (a *App) ListSiteSettings() ([]settings.SiteSummary, error) {
+	st := a.settingsStore()
+	if st == nil {
+		return nil, errors.New("settings store is not available")
+	}
+	summaries, err := st.Summaries()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]settings.SiteSummary, 0, len(summaries))
+	for _, summary := range summaries {
+		summary.Effective = summary.Effective.Redacted()
+		out = append(out, summary)
+	}
+	return out, nil
+}
+
+// SaveSiteSettingsOverride stores a per-site override (custom proxy, message
+// mode, API endpoint, ...). Sections left nil keep following the global file.
+func (a *App) SaveSiteSettingsOverride(siteID string, override settings.Override) (settings.Effective, error) {
+	st := a.settingsStore()
+	if st == nil {
+		return settings.Effective{}, errors.New("settings store is not available")
+	}
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	if _, err := st.SaveOverride(siteID, override); err != nil {
+		return settings.Effective{}, err
+	}
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return settings.Effective{}, err
+	}
+	a.log("info", fmt.Sprintf(
+		"Site %s settings override saved (%s).",
+		siteID,
+		strings.Join(override.Normalize().Keys(), ", "),
+	))
+	a.emit("ui:site_settings_changed", siteID)
+	return effective.Redacted(), nil
+}
+
+// ClearSiteSettingsOverride removes a site override so it follows the global
+// settings again.
+func (a *App) ClearSiteSettingsOverride(siteID string) (settings.Effective, error) {
+	st := a.settingsStore()
+	if st == nil {
+		return settings.Effective{}, errors.New("settings store is not available")
+	}
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	if err := st.ClearOverride(siteID); err != nil {
+		return settings.Effective{}, err
+	}
+	effective, err := a.effectiveSiteSettings(siteID)
+	if err != nil {
+		return settings.Effective{}, err
+	}
+	a.log("info", "Site "+siteID+" settings override cleared; it follows the global settings again.")
+	a.emit("ui:site_settings_changed", siteID)
+	return effective.Redacted(), nil
+}
+
+// GetGlobalSettingsPaths returns where the shared file and a site override live,
+// for the "open folder" affordances in the dashboard.
+func (a *App) GetGlobalSettingsPaths(siteID string) (map[string]string, error) {
+	st := a.settingsStore()
+	if st == nil {
+		return nil, errors.New("settings store is not available")
+	}
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	return st.Paths(siteID), nil
 }
 
 // UnifiedSettingsPayload is the dashboard's single timing form. The bridge
@@ -1130,12 +1584,13 @@ func (a *App) buildBotConfigs() ([]bot.Config, error) {
 		return nil, err
 	}
 
-	messageSettings, err := a.uiStore.LoadMessageSettings()
+	// Effective values: global settings merged with this site's override.
+	messageSettings, err := a.effectiveMessageSettings(a.activeSiteID())
 	if err != nil {
 		return nil, err
 	}
 
-	generalSettings, err := a.uiStore.LoadGeneralSettings()
+	generalSettings, err := a.effectiveGeneralSettings(a.activeSiteID())
 	if err != nil {
 		return nil, err
 	}
@@ -1822,7 +2277,7 @@ func (a *App) loadProxyRotator() (*proxy.Rotator, int, error) {
 }
 
 func (a *App) loadProxyEntries() ([]proxy.Entry, error) {
-	proxySettings, err := a.uiStore.LoadProxySettings()
+	proxySettings, err := a.effectiveProxySettings(a.activeSiteID())
 	if err != nil {
 		return nil, err
 	}

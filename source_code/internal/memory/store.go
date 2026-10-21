@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"chitchatbot/internal/appdirs"
 	"chitchatbot/internal/store"
 )
 
@@ -74,11 +75,14 @@ func DefaultStore(dataDir string) *Store {
 	return s
 }
 
-// NewStore creates and initializes a Store backed by <dataDir>/_global/memory.
-// Memory is application-level state; site-specific state stays in the site
-// folder (bot_state.json, sessions, logs).
+// NewStore creates and initializes a Store backed by the shared
+// <sites-root>/_global/memory directory. Memory is application-level state;
+// site-specific state stays in the site folder (bot_state.json, sessions,
+// logs).
 func NewStore(dataDir string) *Store {
-	primary := filepath.Join(dataDir, "_global", "memory")
+	// EnsureGlobalDirs also migrates a Phase-1 <dataDir>/_global/memory tree.
+	_ = appdirs.EnsureGlobalDirs(dataDir)
+	primary := appdirs.MemoryDir(dataDir)
 	// One-time migration from the pre-isolation data/memory directory.
 	legacy := filepath.Join(dataDir, "memory")
 	if _, err := os.Stat(primary); os.IsNotExist(err) {

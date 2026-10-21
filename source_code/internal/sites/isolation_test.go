@@ -201,9 +201,16 @@ func TestEnsureSitesCreatesOneFolderPerSiteAndOnlyGlobalShares(t *testing.T) {
 		t.Fatal(err)
 	}
 	dirCount := 0
+	sharedCount := 0
 	seenFolders := map[string]bool{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+		if entry.Name() == GlobalDirName {
+			// The one shared folder lives inside the sites root, next to the
+			// site folders, and is never treated as a site.
+			sharedCount++
 			continue
 		}
 		dirCount++
@@ -227,6 +234,9 @@ func TestEnsureSitesCreatesOneFolderPerSiteAndOnlyGlobalShares(t *testing.T) {
 	}
 	if dirCount != 102 {
 		t.Fatalf("expected 102 site folders, got %d", dirCount)
+	}
+	if sharedCount != 1 {
+		t.Fatalf("expected exactly one shared %s folder in the sites root, got %d", GlobalDirName, sharedCount)
 	}
 	for _, shared := range []string{"profiles", "ui", "bot_registry.json"} {
 		if _, err := os.Stat(filepath.Join(dataDir, shared)); !errors.Is(err, os.ErrNotExist) {

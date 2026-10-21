@@ -1,0 +1,26 @@
+{
+  "message_mode": "single",
+  "proxy": {
+    "enabled": false,
+    "entries": ""
+  },
+  "reply_delay": {
+    "min_seconds": 0,
+    "max_seconds": 0
+  },
+  "skip_timeout": {
+    "min_seconds": 60,
+    "max_seconds": 60
+  },
+  "first_message": {
+    "mode": "bot",
+    "bot_first_percent": 70,
+    "wait_timeout": false,
+    "wait_min_seconds": 30,
+    "wait_max_seconds": 60
+  },
+  "api": {
+    "enabled": false,
+    "base_url": "https://api.featherless.ai/v1"
+  }
+}

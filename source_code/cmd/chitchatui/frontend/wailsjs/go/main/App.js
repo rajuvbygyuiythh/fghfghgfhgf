@@ -26,6 +26,10 @@ export function ClearShowModeLog() {
   return window['go']['main']['App']['ClearShowModeLog']();
 }
 
+export function ClearSiteSettingsOverride(arg1) {
+  return window['go']['main']['App']['ClearSiteSettingsOverride'](arg1);
+}
+
 export function CreateSite(arg1, arg2) {
   return window['go']['main']['App']['CreateSite'](arg1, arg2);
 }
@@ -36,6 +40,14 @@ export function CreateSiteWithMode(arg1, arg2, arg3) {
 
 export function GetBotLiveLog(arg1) {
   return window['go']['main']['App']['GetBotLiveLog'](arg1);
+}
+
+export function GetGlobalSettings() {
+  return window['go']['main']['App']['GetGlobalSettings']();
+}
+
+export function GetGlobalSettingsPaths(arg1) {
+  return window['go']['main']['App']['GetGlobalSettingsPaths'](arg1);
 }
 
 export function GetInitialState() {
@@ -54,6 +66,10 @@ export function GetSiteDebugLog(arg1, arg2) {
   return window['go']['main']['App']['GetSiteDebugLog'](arg1, arg2);
 }
 
+export function GetSiteSettings(arg1) {
+  return window['go']['main']['App']['GetSiteSettings'](arg1);
+}
+
 export function GetLocalTestChatState() {
   return window['go']['main']['App']['GetLocalTestChatState']();
 }
@@ -64,6 +80,10 @@ export function ListProfiles() {
 
 export function ListSiteAccounts(arg1) {
   return window['go']['main']['App']['ListSiteAccounts'](arg1);
+}
+
+export function ListSiteSettings() {
+  return window['go']['main']['App']['ListSiteSettings']();
 }
 
 export function ListSites() {
@@ -118,6 +138,10 @@ export function SaveGeneralSettings(arg1) {
   return window['go']['main']['App']['SaveGeneralSettings'](arg1);
 }
 
+export function SaveGlobalSettings(arg1) {
+  return window['go']['main']['App']['SaveGlobalSettings'](arg1);
+}
+
 export function SaveMessageSettings(arg1) {
   return window['go']['main']['App']['SaveMessageSettings'](arg1);
 }
@@ -128,6 +152,10 @@ export function SaveProxySettings(arg1) {
 
 export function SaveShowModeSettings(arg1) {
   return window['go']['main']['App']['SaveShowModeSettings'](arg1);
+}
+
+export function SaveSiteSettingsOverride(arg1, arg2) {
+  return window['go']['main']['App']['SaveSiteSettingsOverride'](arg1, arg2);
 }
 
 export function SaveUnifiedSettings(arg1) {

@@ -16,11 +16,17 @@ export function ClearLogs():Promise<void>;
 
 export function ClearShowModeLog():Promise<void>;
 
+export function ClearSiteSettingsOverride(arg1:string):Promise<any>;
+
 export function CreateSite(arg1:string,arg2:string):Promise<model.SiteOption>;
 
 export function CreateSiteWithMode(arg1:string,arg2:string,arg3:string):Promise<model.SiteOption>;
 
 export function GetBotLiveLog(arg1:number):Promise<main.BotLogSnapshot>;
+
+export function GetGlobalSettings():Promise<any>;
+
+export function GetGlobalSettingsPaths(arg1:string):Promise<Record<string, string>>;
 
 export function GetInitialState():Promise<model.UISnapshot>;
 
@@ -30,11 +36,15 @@ export function GetShowModeLog(arg1:number):Promise<main.ShowLogSnapshot>;
 
 export function GetSiteDebugLog(arg1:string,arg2:number):Promise<Array<any>>;
 
+export function GetSiteSettings(arg1:string):Promise<any>;
+
 export function GetLocalTestChatState():Promise<any>;
 
 export function ListProfiles():Promise<Array<main.ProfileOption>>;
 
 export function ListSiteAccounts(arg1:string):Promise<Array<any>>;
+
+export function ListSiteSettings():Promise<Array<any>>;
 
 export function ListSites():Promise<Array<model.SiteOption>>;
 
@@ -62,11 +72,15 @@ export function SaveBrowserSettings(arg1:model.BrowserSettings):Promise<void>;
 
 export function SaveGeneralSettings(arg1:model.GeneralSettings):Promise<void>;
 
+export function SaveGlobalSettings(arg1:any):Promise<any>;
+
 export function SaveMessageSettings(arg1:model.MessageSettings):Promise<void>;
 
 export function SaveProxySettings(arg1:model.ProxySettings):Promise<void>;
 
 export function SaveShowModeSettings(arg1:model.ShowModeSettings):Promise<void>;
+
+export function SaveSiteSettingsOverride(arg1:string,arg2:any):Promise<any>;
 
 export function SaveUnifiedSettings(arg1:main.UnifiedSettingsPayload):Promise<void>;
 
