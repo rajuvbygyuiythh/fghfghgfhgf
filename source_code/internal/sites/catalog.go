@@ -132,7 +132,7 @@ func makeSiteConfig(s siteSeed) Config {
 	if accMode == "" {
 		accMode = DefaultAccountMode(s.ID, "dom_only")
 	}
-	return Config{
+	cfg := Config{
 		ID:                s.ID,
 		Name:              s.Name,
 		Family:            s.Family,
@@ -146,6 +146,8 @@ func makeSiteConfig(s siteSeed) Config {
 		ProtectionSummary: s.Protection,
 		Selectors:         ArchetypeSelectors(s.Family),
 	}
+	cfg.Classification = InitialClassification(cfg)
+	return cfg
 }
 
 // CatalogByID looks up a built-in non-ChitChat site configuration by ID.

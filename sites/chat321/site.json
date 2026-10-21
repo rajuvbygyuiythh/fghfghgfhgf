@@ -9,6 +9,14 @@
   "auth_mode": "dom_only",
   "entry_flow": "Nickname + Age + Female -\u003e Enter Chat -\u003e Private 1-on-1",
   "protection_summary": "337K+ monthly visits; partnered with TalkWithStranger guest infrastructure.",
+  "classification": {
+    "group": "B",
+    "group_name": "Auto-Signup",
+    "confidence": "low",
+    "source": "initial_guess",
+    "reason": "Initial guess: guest/nickname auto-signup flow with no CAPTCHA",
+    "classified_at": "2026-10-21T20:25:40Z"
+  },
   "selectors": {
     "composer_input": "textarea:not([disabled]), input#content:not([disabled]), input#message_content:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"say\" i]:not([disabled])",
     "send_button": "button#submit_button, button[type=\"submit\"], button.send_btn, input[type=\"submit\"]",

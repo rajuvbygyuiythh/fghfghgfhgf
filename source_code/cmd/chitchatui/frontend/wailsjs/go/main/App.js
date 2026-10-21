@@ -42,6 +42,10 @@ export function GetBotLiveLog(arg1) {
   return window['go']['main']['App']['GetBotLiveLog'](arg1);
 }
 
+export function GetClassificationGroups() {
+  return window['go']['main']['App']['GetClassificationGroups']();
+}
+
 export function GetGlobalSettings() {
   return window['go']['main']['App']['GetGlobalSettings']();
 }
@@ -104,6 +108,14 @@ export function OpenEVAChatDataFolder() {
 
 export function OpenSiteFolder(arg1) {
   return window['go']['main']['App']['OpenSiteFolder'](arg1);
+}
+
+export function ProbeAndClassifyAllSites() {
+  return window['go']['main']['App']['ProbeAndClassifyAllSites']();
+}
+
+export function ProbeAndClassifySite(arg1) {
+  return window['go']['main']['App']['ProbeAndClassifySite'](arg1);
 }
 
 export function RunBrowser(arg1, arg2) {

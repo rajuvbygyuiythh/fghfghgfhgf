@@ -7,6 +7,14 @@
   "app_url": "https://app.chitchat.gg/",
   "api_base_url": "https://api.chitchat.gg",
   "auth_mode": "chitchat_jwt",
+  "classification": {
+    "group": "C",
+    "group_name": "Browser-Once",
+    "confidence": "low",
+    "source": "initial_guess",
+    "reason": "Initial guess: one-time browser login or CAPTCHA/Turnstile setup before session reuse",
+    "classified_at": "2026-10-21T20:25:40Z"
+  },
   "selectors": {
     "composer_input": "[data-chat-composer=\"true\"] textarea[aria-label=\"Send a message\"]",
     "skip_button": "[data-chat-composer=\"true\"] button[aria-keyshortcuts=\"Escape\"]",

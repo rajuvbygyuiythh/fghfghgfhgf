@@ -29,6 +29,7 @@ function runDeepDiagnostics() {
   const missingSiteFiles = [];
   let autoRegCount = 0;
   let browserSetupCount = 0;
+  const groupCounts = { A: 0, B: 0, C: 0, D: 0, E: 0 };
   for (const id of siteDirs) {
     const dir = path.join(sitesRoot, id);
     const required = [
@@ -52,6 +53,12 @@ function runDeepDiagnostics() {
         const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
         if (cfg.account_mode === "auto_register") autoRegCount += 1;
         else if (cfg.account_mode === "browser_setup") browserSetupCount += 1;
+        const g = cfg.classification && cfg.classification.group;
+        if (g && Object.prototype.hasOwnProperty.call(groupCounts, g)) {
+          groupCounts[g] += 1;
+        } else {
+          missingSiteFiles.push(`${id}/site.json (missing classification.group)`);
+        }
       } catch (e) {
         missingSiteFiles.push(`${id}/site.json (invalid JSON)`);
       }
@@ -73,20 +80,21 @@ function runDeepDiagnostics() {
     );
   }
 
-  // Step 2: Dual Account Mode Classification Check
-  if (autoRegCount >= 85 && browserSetupCount >= 16) {
+  // Step 2: Dual Account Mode & Group A-E Classification Check
+  const classifiedTotal = groupCounts.A + groupCounts.B + groupCounts.C + groupCounts.D + groupCounts.E;
+  if (autoRegCount >= 85 && browserSetupCount >= 16 && classifiedTotal >= 102) {
     addStep(
       2,
-      "Dual Account Setup Classification",
+      "Dual Account Setup & Group A-E Classification",
       "PASS",
-      `⚡ Auto-Register (No Browser): ${autoRegCount} sites | 🌐 First Browser Account Setup: ${browserSetupCount} sites`,
+      `⚡ Auto-Register: ${autoRegCount} | 🌐 Browser Setup: ${browserSetupCount} | Groups A=${groupCounts.A} B=${groupCounts.B} C=${groupCounts.C} D=${groupCounts.D} E=${groupCounts.E}`,
     );
   } else {
     addStep(
       2,
-      "Dual Account Setup Classification",
+      "Dual Account Setup & Group A-E Classification",
       "FAIL",
-      `Unexpected account_mode counts: auto_register=${autoRegCount}, browser_setup=${browserSetupCount}`,
+      `Unexpected counts: auto_register=${autoRegCount}, browser_setup=${browserSetupCount}, classified=${classifiedTotal}`,
     );
   }
 

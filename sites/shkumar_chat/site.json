@@ -9,6 +9,14 @@
   "auth_mode": "dom_only",
   "entry_flow": "Instant Anonymous 1v1 -\u003e Connected! Say Hi",
   "protection_summary": "Open-source GitHub Pages + WebSocket 1v1 stranger text chat; zero CAPTCHA, zero login.",
+  "classification": {
+    "group": "A",
+    "group_name": "Browserless",
+    "confidence": "low",
+    "source": "initial_guess",
+    "reason": "Initial guess: direct anonymous chat with no signup and no CAPTCHA",
+    "classified_at": "2026-10-21T20:25:40Z"
+  },
   "selectors": {
     "composer_input": "textarea:not([disabled]), input[type=\"text\"]:not([disabled])[placeholder*=\"message\" i], input[type=\"text\"]:not([disabled])[placeholder*=\"type\" i], #messageInput, #chatInput",
     "send_button": "button#sendBtn, button[type=\"submit\"], button.send-btn, button[aria-label*=\"Send\" i]",

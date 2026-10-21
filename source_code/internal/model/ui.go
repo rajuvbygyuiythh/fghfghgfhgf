@@ -116,6 +116,9 @@ type SiteOption struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	Family          string `json:"family,omitempty"`
+	Group           string `json:"group,omitempty"`
+	GroupName       string `json:"group_name,omitempty"`
+	Confidence      string `json:"confidence,omitempty"`
 	AccountMode     string `json:"account_mode"`
 	AccountCount    int    `json:"account_count"`
 	HasSavedSession bool   `json:"has_saved_session"`

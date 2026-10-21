@@ -1,6 +1,6 @@
 {
   "overall_status": "PASS",
-  "checked_at": "2026-10-21T17:24:44.606Z",
+  "checked_at": "2026-10-21T20:26:29.836Z",
   "total_sites": 102,
   "auto_register_sites": 86,
   "browser_setup_sites": 16,
@@ -13,9 +13,9 @@
     },
     {
       "step": 2,
-      "name": "Dual Account Setup Classification",
+      "name": "Dual Account Setup & Group A-E Classification",
       "status": "PASS",
-      "detail": "⚡ Auto-Register (No Browser): 86 sites | 🌐 First Browser Account Setup: 16 sites"
+      "detail": "⚡ Auto-Register: 86 | 🌐 Browser Setup: 16 | Groups A=20 B=34 C=12 D=32 E=4"
     },
     {
       "step": 3,

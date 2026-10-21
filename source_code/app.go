@@ -282,6 +282,9 @@ func toSiteOption(c sites.Config) model.SiteOption {
 		ID:              c.ID,
 		Name:            c.Name,
 		Family:          c.Family,
+		Group:           c.Classification.Group,
+		GroupName:       c.Classification.GroupName,
+		Confidence:      c.Classification.Confidence,
 		AccountMode:     c.AccountMode,
 		AccountCount:    c.AccountCount,
 		HasSavedSession: c.HasSavedSession,
@@ -292,6 +295,47 @@ func toSiteOption(c sites.Config) model.SiteOption {
 		EntryFlow:       c.EntryFlow,
 		FolderPath:      c.FolderPath,
 	}
+}
+
+// GetClassificationGroups returns the 5 canonical site classification groups (A–E).
+func (a *App) GetClassificationGroups() []sites.GroupDefinition {
+	return sites.AllGroups()
+}
+
+// ProbeAndClassifySite re-probes one site's URL, classifies it into Group A–E,
+// saves the result into sites/<site_id>/site.json, and returns the updated config.
+func (a *App) ProbeAndClassifySite(siteID string) (sites.Config, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cfg, err := sites.ProbeAndClassifySite(probeCtx, a.dataDir, siteID, nil)
+	if err != nil {
+		return sites.Config{}, err
+	}
+	a.log("info", fmt.Sprintf(
+		"Site %s classified as Group %s (%s) [confidence=%s]: %s",
+		cfg.ID,
+		cfg.Classification.Group,
+		cfg.Classification.GroupName,
+		cfg.Classification.Confidence,
+		cfg.Classification.Reason,
+	))
+	return cfg, nil
+}
+
+// ProbeAndClassifyAllSites re-probes and updates the classification of all sites.
+func (a *App) ProbeAndClassifyAllSites() ([]sites.Config, error) {
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return sites.ProbeAndClassifyAllSites(ctx, a.dataDir, nil)
 }
 
 func (a *App) ListSites() ([]model.SiteOption, error) {

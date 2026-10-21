@@ -24,6 +24,8 @@ export function CreateSiteWithMode(arg1:string,arg2:string,arg3:string):Promise<
 
 export function GetBotLiveLog(arg1:number):Promise<main.BotLogSnapshot>;
 
+export function GetClassificationGroups():Promise<Array<any>>;
+
 export function GetGlobalSettings():Promise<any>;
 
 export function GetGlobalSettingsPaths(arg1:string):Promise<Record<string, string>>;
@@ -55,6 +57,10 @@ export function OpenAPIChatDataFolder():Promise<string>;
 export function OpenEVAChatDataFolder():Promise<string>;
 
 export function OpenSiteFolder(arg1:string):Promise<string>;
+
+export function ProbeAndClassifyAllSites():Promise<Array<any>>;
+
+export function ProbeAndClassifySite(arg1:string):Promise<any>;
 
 export function RunBrowser(arg1:model.BrowserSettings,arg2:number):Promise<void>;
 

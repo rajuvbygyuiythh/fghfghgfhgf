@@ -9,6 +9,14 @@
   "auth_mode": "dom_only",
   "entry_flow": "18+ confirmation -\u003e Tap to Chat (--random --no-mic)",
   "protection_summary": "No signup, no mic/camera. Maintains a rolling 5,000-message server moderation log; avoid sending identical opener spam rapidly.",
+  "classification": {
+    "group": "A",
+    "group_name": "Browserless",
+    "confidence": "low",
+    "source": "initial_guess",
+    "reason": "Initial guess: direct anonymous chat with no signup and no CAPTCHA",
+    "classified_at": "2026-10-21T20:25:40Z"
+  },
   "selectors": {
     "composer_input": "textarea:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"type\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"say\" i]:not([disabled]), [contenteditable=\"true\"]",
     "send_button": "button[type=\"submit\"], button[aria-label*=\"Send\" i], button.send-btn, button.send",

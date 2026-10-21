@@ -141,6 +141,29 @@ go test -race ./internal/sites/ ./internal/settings/ ./internal/appdirs/ ./inter
 - `settings.Merge(global, override)` computes `Effective{Settings, SiteID, Sources}` without mutating its inputs.
 - Saving settings from the dashboard (`SaveMessageSettings`, `SaveProxySettings`, `SaveGeneralSettings`, `SaveUnifiedSettings`, or `SaveGlobalSettings`) updates `sites/_global/settings.json` atomically (`writeJSONAtomic` with `0600` permissions) and immediately applies to all sites that have not overridden that section.
 
+## Phase 3 — Site Classification (Group A–E) & Live Re-Prober (`internal/sites/classification.go`)
+
+Every site is classified into one of five execution groups stored inside `sites/<site_id>/site.json` under `"classification"`:
+
+| Group | Name | Meaning |
+| --- | --- | --- |
+| `A` | `Browserless` | signup লাগে না, direct chat (no captcha, no login, direct WS/API) |
+| `B` | `Auto-Signup` | API দিয়ে account বানানো যায়, captcha নেই |
+| `C` | `Browser-Once` | captcha/login লাগে একবার, পরে browserless |
+| `D` | `DOM-Only` | API/WS নেই, headless browser দিয়ে DOM chat |
+| `E` | `Manual` | heavy bot detection, manual only |
+
+- `ProbeURL(ctx, rawURL, client)` / `AnalyzeHTML(...)` detects:
+  - Captcha (`has_captcha`, `captcha_keywords`: `recaptcha`, `hcaptcha`, `cloudflare`, `arkose`, `funcaptcha`, `datadome`, `perimeterx`)
+  - Signup form (`has_signup_form`, `signup_indicators`)
+  - WebSocket endpoint (`has_websocket`, `websocket_endpoints`)
+  - API endpoint (`has_api_endpoint`, `api_endpoints`)
+  - Login required (`login_required`, `login_indicators`)
+  - Heavy bot detection (`heavy_bot_detection`, `bot_check_keywords`)
+- `ClassifyProbe(probe)` deterministically assigns Group `A`–`E` with `confidence: "high"` (or `"low"` when offline).
+- All 102 existing `sites/<site_id>/site.json` files ship with an initial classification (`confidence: "low"`, `source: "initial_guess"`).
+- Classification is re-runnable at any time via `ProbeAndClassifySite(ctx, dataDir, siteID, client)` and `ProbeAndClassifyAllSites(ctx, dataDir, client)` (exposed to Wails via `App.ProbeAndClassifySite` and `App.ProbeAndClassifyAllSites`).
+
 ## Boundaries of this phase
 
 - The site **catalog** (`sites/<id>/site.json`, `dom_driver.js`, `README.txt`) is

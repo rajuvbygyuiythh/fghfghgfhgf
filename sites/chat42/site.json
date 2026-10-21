@@ -9,6 +9,14 @@
   "auth_mode": "dom_only",
   "entry_flow": "Enter your name -\u003e Start instant random text chat",
   "protection_summary": "Native messaging-style web UI with zero registration.",
+  "classification": {
+    "group": "D",
+    "group_name": "DOM-Only",
+    "confidence": "low",
+    "source": "initial_guess",
+    "reason": "Initial guess: DOM-driven stranger chat; run live probe to detect API/WebSocket endpoints",
+    "classified_at": "2026-10-21T20:25:40Z"
+  },
   "selectors": {
     "composer_input": "textarea:not([disabled]), input#content:not([disabled]), input#message_content:not([disabled]), input[type=\"text\"][placeholder*=\"message\" i]:not([disabled]), input[type=\"text\"][placeholder*=\"say\" i]:not([disabled])",
     "send_button": "button#submit_button, button[type=\"submit\"], button.send_btn, input[type=\"submit\"]",

@@ -38,23 +38,24 @@ type Selectors struct {
 // Each site lives in its own isolated folder so broken or changed sites never
 // affect any other site or the shared reply engine.
 type Config struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	Family            string    `json:"family,omitempty"`
-	AccountMode       string    `json:"account_mode"`
-	AccountCount      int       `json:"account_count,omitempty"`
-	HasSavedSession   bool      `json:"has_saved_session,omitempty"`
-	SessionSavedAt    string    `json:"session_saved_at,omitempty"`
-	SessionPath       string    `json:"session_path,omitempty"`
-	Enabled           bool      `json:"enabled"`
-	StartURL          string    `json:"start_url"`
-	AppURL            string    `json:"app_url"`
-	APIBaseURL        string    `json:"api_base_url,omitempty"`
-	AuthMode          string    `json:"auth_mode"`
-	EntryFlow         string    `json:"entry_flow,omitempty"`
-	ProtectionSummary string    `json:"protection_summary,omitempty"`
-	Selectors         Selectors `json:"selectors"`
-	FolderPath        string    `json:"folder_path,omitempty"`
+	ID                string         `json:"id"`
+	Name              string         `json:"name"`
+	Family            string         `json:"family,omitempty"`
+	AccountMode       string         `json:"account_mode"`
+	AccountCount      int            `json:"account_count,omitempty"`
+	HasSavedSession   bool           `json:"has_saved_session,omitempty"`
+	SessionSavedAt    string         `json:"session_saved_at,omitempty"`
+	SessionPath       string         `json:"session_path,omitempty"`
+	Enabled           bool           `json:"enabled"`
+	StartURL          string         `json:"start_url"`
+	AppURL            string         `json:"app_url"`
+	APIBaseURL        string         `json:"api_base_url,omitempty"`
+	AuthMode          string         `json:"auth_mode"`
+	EntryFlow         string         `json:"entry_flow,omitempty"`
+	ProtectionSummary string         `json:"protection_summary,omitempty"`
+	Classification    Classification `json:"classification"`
+	Selectors         Selectors      `json:"selectors"`
+	FolderPath        string         `json:"folder_path,omitempty"`
 }
 
 var nonSlugChars = regexp.MustCompile(`[^a-z0-9_-]+`)
@@ -86,7 +87,7 @@ func NormalizeAccountMode(mode, siteID, authMode string) string {
 
 // DefaultChitChatConfig returns the isolated site config for ChitChat.gg.
 func DefaultChitChatConfig() Config {
-	return Config{
+	cfg := Config{
 		ID:                DefaultSiteID,
 		Name:              "ChitChat.gg",
 		Family:            "chitchat_core",
@@ -108,11 +109,13 @@ func DefaultChitChatConfig() Config {
 			PartnerName:    `[data-conversation-header] button[aria-label^="View @"]`,
 		},
 	}
+	cfg.Classification = InitialClassification(cfg)
+	return cfg
 }
 
 // DefaultTemplateConfig returns a starter template config for adding any new site.
 func DefaultTemplateConfig() Config {
-	return Config{
+	cfg := Config{
 		ID:                TemplateSiteID,
 		Name:              "Template New Site (Example)",
 		Family:            "custom",
@@ -126,6 +129,8 @@ func DefaultTemplateConfig() Config {
 		ProtectionSummary: "Template site folder. Use skills/protection_detector.js to inspect target anti-bot rules.",
 		Selectors:         ArchetypeSelectors("family_a"),
 	}
+	cfg.Classification = InitialClassification(cfg)
+	return cfg
 }
 
 // EnsureSites initializes the single canonical sites root for this data
@@ -170,6 +175,7 @@ func EnsureSites(dataDir string) (string, error) {
 // the context root; every operation goes through SiteContext.
 func ensureSiteFolder(root string, cfg Config, isChitChat bool) error {
 	cfg.AccountMode = NormalizeAccountMode(cfg.AccountMode, cfg.ID, cfg.AuthMode)
+	cfg.Classification = cfg.Classification.Normalize(cfg)
 	ctx, err := newSiteContextAtRoot(root, cfg.ID)
 	if err != nil {
 		return err
@@ -192,15 +198,29 @@ func ensureSiteFolder(root string, cfg Config, isChitChat bool) error {
 
 	cfgPath := "site.json"
 	if _, statErr := ctx.Stat(cfgPath); errors.Is(statErr, os.ErrNotExist) {
-		if err := ctx.SaveJSON(cfgPath, cfg); err != nil {
+		toSave := cfg
+		toSave.FolderPath = ""
+		if err := ctx.SaveJSON(cfgPath, toSave); err != nil {
 			return err
 		}
 	} else {
 		var existing Config
 		if ok, loadErr := ctx.LoadJSON(cfgPath, &existing); loadErr == nil && ok {
 			normalized := NormalizeAccountMode(existing.AccountMode, cfg.ID, existing.AuthMode)
+			normCls := existing.Classification.Normalize(cfg)
+			dirty := false
 			if existing.AccountMode != normalized {
 				existing.AccountMode = normalized
+				dirty = true
+			}
+			if existing.Classification.Group != normCls.Group ||
+				existing.Classification.GroupName != normCls.GroupName ||
+				existing.Classification.Confidence != normCls.Confidence {
+				existing.Classification = normCls
+				dirty = true
+			}
+			if dirty {
+				existing.FolderPath = ""
 				if err := ctx.SaveJSON(cfgPath, existing); err != nil {
 					return err
 				}
@@ -458,6 +478,7 @@ func loadSiteAtRoot(root, dataDir, id string) (Config, error) {
 		}
 	}
 	cfg.AccountMode = NormalizeAccountMode(cfg.AccountMode, cfg.ID, cfg.AuthMode)
+	cfg.Classification = cfg.Classification.Normalize(cfg)
 	cfg.AccountCount = CountSiteAccounts(dataDir, id)
 	cfg.HasSavedSession, cfg.SessionSavedAt, cfg.SessionPath = SiteSessionStatus(dataDir, id)
 	cfg.FolderPath = ctx.FolderPath
@@ -506,6 +527,7 @@ func CreateSiteWithMode(dataDir, name, startURL, accountMode string) (Config, er
 		ProtectionSummary: "Custom site created via dashboard. Inspect with skills/protection_detector.js if needed.",
 		Selectors:         tmpl.Selectors,
 	}
+	cfg.Classification = InitialClassification(cfg)
 
 	root, err := EnsureSites(dataDir)
 	if err != nil {
@@ -524,6 +546,7 @@ func CreateSiteWithMode(dataDir, name, startURL, accountMode string) (Config, er
 
 func writeSiteFiles(root string, cfg Config) error {
 	cfg.AccountMode = NormalizeAccountMode(cfg.AccountMode, cfg.ID, cfg.AuthMode)
+	cfg.Classification = cfg.Classification.Normalize(cfg)
 	ctx, err := newSiteContextAtRoot(root, cfg.ID)
 	if err != nil {
 		return err
@@ -542,7 +565,9 @@ func writeSiteFiles(root string, cfg Config) error {
 			return err
 		}
 	}
-	if err := ctx.SaveJSON("site.json", cfg); err != nil {
+	toSave := cfg
+	toSave.FolderPath = ""
+	if err := ctx.SaveJSON("site.json", toSave); err != nil {
 		return err
 	}
 	if err := ctx.WriteFile("README.txt", []byte(siteReadmeText(cfg)), 0o644); err != nil {
