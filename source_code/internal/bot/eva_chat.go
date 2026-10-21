@@ -1158,6 +1158,48 @@ func evaChatSession(accountState *model.AccountState, userID string) model.EVACh
 	return session
 }
 
+// EVAChatStartTurn starts a new EVAChat Flow conversation for userID using
+// eva_chat.go and updates the site's isolated AccountState.
+func EVAChatStartTurn(cfg Config, accountState *model.AccountState, userID string, rng *rand.Rand) EVAReplyResult {
+	normalizeBotAccountState(accountState)
+	if rng == nil {
+		rng = rand.New(rand.NewSource(1))
+	}
+	res := evaChatStart(cfg, accountState, userID, rng)
+	if strings.TrimSpace(res.Text) != "" || len(res.Extra) > 0 {
+		accountState.SentMessageCounts[userID]++
+		accountState.BaselineDone[userID] = true
+		if res.HasUsername {
+			accountState.SnapTgSentCount++
+			if dir := cfg.EffectiveDataDir(); dir != "" {
+				_ = markUserFlagged(dir, userID)
+			}
+		}
+	}
+	return res
+}
+
+// EVAChatReplyTurn processes one incoming user message through EVAChat Flow
+// using eva_chat.go and updates the site's isolated AccountState.
+func EVAChatReplyTurn(cfg Config, accountState *model.AccountState, userID, incoming string, rng *rand.Rand) EVAReplyResult {
+	normalizeBotAccountState(accountState)
+	if rng == nil {
+		rng = rand.New(rand.NewSource(1))
+	}
+	res := evaChatReply(cfg, accountState, userID, incoming, rng)
+	if strings.TrimSpace(res.Text) != "" || len(res.Extra) > 0 {
+		accountState.SentMessageCounts[userID]++
+		accountState.BaselineDone[userID] = true
+		if res.HasUsername {
+			accountState.SnapTgSentCount++
+			if dir := cfg.EffectiveDataDir(); dir != "" {
+				_ = markUserFlagged(dir, userID)
+			}
+		}
+	}
+	return res
+}
+
 func evaChatStart(cfg Config, accountState *model.AccountState, userID string, rng *rand.Rand) EVAReplyResult {
 	session := evaChatSession(accountState, userID)
 	result := cfg.EVAChat.Engine.Start(&session, rng)

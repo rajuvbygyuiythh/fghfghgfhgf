@@ -414,9 +414,33 @@ func (a *App) StartSelected(siteIDs []string) error {
 	return a.runnerSupervisor().StartSelected(siteIDs)
 }
 
+// StartSites starts the selected list of sites in isolated runner goroutines (Prompt 6).
+func (a *App) StartSites(siteIDs []string) error {
+	err := a.runnerSupervisor().StartSites(siteIDs)
+	a.emit("ui:site_statuses", a.runnerSupervisor().GetSiteStatuses())
+	return err
+}
+
+// StopSites cleanly stops the selected list of site runners without affecting
+// other running sites (Prompt 6).
+func (a *App) StopSites(siteIDs []string) error {
+	err := a.runnerSupervisor().StopSites(siteIDs)
+	a.emit("ui:site_statuses", a.runnerSupervisor().GetSiteStatuses())
+	return err
+}
+
+// StartAll starts all enabled sites in the catalog in isolated runner goroutines (Prompt 6).
+func (a *App) StartAll() error {
+	err := a.runnerSupervisor().StartAll()
+	a.emit("ui:site_statuses", a.runnerSupervisor().GetSiteStatuses())
+	return err
+}
+
 // StopAll cleanly stops all active site runner goroutines.
 func (a *App) StopAll() error {
-	return a.runnerSupervisor().StopAll()
+	err := a.runnerSupervisor().StopAll()
+	a.emit("ui:site_statuses", a.runnerSupervisor().GetSiteStatuses())
+	return err
 }
 
 // GetStatus returns the current runner status and statistics for siteID.
@@ -427,6 +451,19 @@ func (a *App) GetStatus(siteID string) (runner.SiteStatus, error) {
 // GetAllStatuses returns the status map for all tracked site runners.
 func (a *App) GetAllStatuses() map[string]runner.SiteStatus {
 	return a.runnerSupervisor().GetAllStatuses()
+}
+
+// GetSiteStatuses returns the status map for all tracked site runners (Prompt 6).
+func (a *App) GetSiteStatuses() map[string]runner.SiteStatus {
+	return a.runnerSupervisor().GetSiteStatuses()
+}
+
+// GetSiteChatHistory reads the isolated chat_history.jsonl for siteID.
+func (a *App) GetSiteChatHistory(siteID string) ([]bot.ChatHistoryEntry, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	return runner.ReadSiteChatHistory(a.dataDir, siteID)
 }
 
 // PauseSite pauses a site runner with a reason.
@@ -644,6 +681,12 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(ctx context.Context) {
 	_ = a.StopBot()
+	a.mu.Lock()
+	sup := a.supervisor
+	a.mu.Unlock()
+	if sup != nil {
+		_ = sup.StopAll()
+	}
 	if a.uiStore != nil {
 		_ = a.uiStore.Close()
 	}

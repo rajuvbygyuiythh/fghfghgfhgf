@@ -109,6 +109,62 @@ func apiChatSession(accountState *model.AccountState, userID string, rng *rand.R
 	return session
 }
 
+// APIChatStartTurn starts a new API Chat conversation for userID using
+// api_chat.go and updates the site's isolated AccountState.
+func APIChatStartTurn(ctx context.Context, cfg Config, accountState *model.AccountState, userID string, rng *rand.Rand) EVAReplyResult {
+	normalizeBotAccountState(accountState)
+	if rng == nil {
+		rng = rand.New(rand.NewSource(1))
+	}
+	res := apiChatStart(ctx, cfg, accountState, userID, rng)
+	if strings.TrimSpace(res.Text) != "" || len(res.Extra) > 0 {
+		accountState.SentMessageCounts[userID]++
+		accountState.BaselineDone[userID] = true
+		if res.HasUsername {
+			accountState.SnapTgSentCount++
+			if dir := cfg.EffectiveDataDir(); dir != "" {
+				_ = markUserFlagged(dir, userID)
+			}
+		}
+	}
+	return res
+}
+
+// APIChatReplyTurn processes one incoming user message through API Chat using
+// api_chat.go and updates the site's isolated AccountState.
+func APIChatReplyTurn(ctx context.Context, cfg Config, accountState *model.AccountState, userID, incoming string, rng *rand.Rand) EVAReplyResult {
+	normalizeBotAccountState(accountState)
+	if rng == nil {
+		rng = rand.New(rand.NewSource(1))
+	}
+	res := apiChatReply(ctx, cfg, accountState, userID, incoming, rng)
+	if strings.TrimSpace(res.Text) != "" || len(res.Extra) > 0 {
+		accountState.SentMessageCounts[userID]++
+		accountState.BaselineDone[userID] = true
+		if res.HasUsername {
+			accountState.SnapTgSentCount++
+			if dir := cfg.EffectiveDataDir(); dir != "" {
+				_ = markUserFlagged(dir, userID)
+			}
+		}
+	}
+	return res
+}
+
+// FlowMessageLines returns all non-empty lines from an EVAChat or API Chat turn.
+func FlowMessageLines(result EVAReplyResult) []string {
+	lines := make([]string, 0, 1+len(result.Extra))
+	if t := strings.TrimSpace(result.Text); t != "" {
+		lines = append(lines, t)
+	}
+	for _, extra := range result.Extra {
+		if t := strings.TrimSpace(extra); t != "" {
+			lines = append(lines, t)
+		}
+	}
+	return lines
+}
+
 func apiChatStart(ctx context.Context, cfg Config, accountState *model.AccountState, userID string, rng *rand.Rand) EVAReplyResult {
 	session := apiChatSession(accountState, userID, rng)
 	result := cfg.APIChat.Engine.Start(ctx, &session)

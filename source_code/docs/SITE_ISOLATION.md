@@ -196,6 +196,26 @@ Every site is classified into one of five execution groups stored inside `sites/
 - **Integration with `internal/bot` & `internal/browser`**:
   - Executes `bot/` chat logic (`sequence`, `folder`, `evachat`, `apichat`) rooted at `sites/<site_id>/` and connects via `browser.Backend` using `sites/<site_id>/profiles/<profile>/browser` as `UserDataDir`.
 
+## Phase 6 — Connect Supervisor to Existing Engine (`internal/runner/supervisor.go`, `internal/bot/`, `app.go`)
+
+- **Transport & Chat Engine Wiring in `Supervisor.executeOneCycle`**:
+  - **WebSocket sites (`TransportWebSocket = "websocket"`)** → calls `internal/bot/realtime.go` (`StartRealtimeListener`, `ParseRealtimeEvent`, `ShouldWakeForRealtimeEvent`, `ProcessRealtimeEvent`).
+  - **API sites (`TransportAPI = "api"`)** → calls `internal/bot/api_chat.go`, `run.go` (`RunAPICycle`), and `logic.go`.
+  - **DOM sites (`TransportDOM = "dom"`)** → calls `internal/browser/domchat.go` (`ReadDOMSnapshot`, `SendDOMMessage`, `ClickDOMButton`, `DOMProbe`, `ConfigureSiteDOM`).
+  - **Sequence mode (`single` / `folder`)** → calls `internal/bot/message_sequence.go` (`ExecuteSequenceTurn`, `RenderMessageTemplate`, `ChooseUsername`).
+  - **EVA mode (`eva_chat_flow`)** → calls `internal/bot/eva_chat.go` (`EVAChatStartTurn`, `EVAChatReplyTurn`).
+  - **API mode (`api_chat`)** → calls `internal/bot/api_chat.go` (`APIChatStartTurn`, `APIChatReplyTurn`).
+- **Site Context Passed into Bot Engine (`bot.Config.WithSiteContext(siteID, siteFolder)`)**:
+  - `EffectiveDataDir()` resolves every bot path (`profiles/<profile>/bot_state.json`, `profiles/<profile>/login_info.json`, `sessions/`, `data/eva_chat/`, `data/api_chat/`, `logs/chat_history.jsonl`, `logs/activity.log`, `logs/runner.jsonl`, `bot_registry.json`, `flagged_users.json`) strictly inside `sites/<site_id>/`.
+- **Multi-Site Controller Methods in `app.go` (with Wails Frontend Bindings)**:
+  - `StartSites(list []string) error`
+  - `StopSites(list []string) error`
+  - `StartAll() error`
+  - `StopAll() error`
+  - `GetSiteStatuses() map[string]runner.SiteStatus`
+  - `GetSiteChatHistory(siteID string) ([]bot.ChatHistoryEntry, error)`
+  - Existing `StartBot()` and `StopBot()` remain untouched for backward compatibility (`chitchat.gg`).
+
 ## Boundaries of this phase
 
 - The site **catalog** (`sites/<id>/site.json`, `dom_driver.js`, `README.txt`) is

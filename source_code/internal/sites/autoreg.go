@@ -196,7 +196,14 @@ func RecordBrowserSetupAccount(
 ) (SiteAccount, error) {
 	cfg, err := LoadSite(dataDir, siteID)
 	if err != nil {
-		return SiteAccount{}, err
+		cleanID := SanitizeID(siteID)
+		if cleanID == "" {
+			return SiteAccount{}, err
+		}
+		cfg = Config{
+			ID:   cleanID,
+			Name: cleanID,
+		}
 	}
 	profile = strings.TrimSpace(profile)
 	if profile == "" {

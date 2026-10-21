@@ -182,7 +182,13 @@ func LoadSiteSession(dataDir, siteID, profile string) (model.LoginInfo, string, 
 			Cookies:      cookies,
 			LocalStorage: acc.LocalStore,
 		}
-		return login, acc.FilePath, true
+		filePath := strings.TrimSpace(acc.FilePath)
+		if filePath == "" {
+			if p, pErr := ctx.Resolve(filepath.Join("accounts", fmt.Sprintf("account_%s.json", acc.ID))); pErr == nil {
+				filePath = p
+			}
+		}
+		return login, filePath, true
 	}
 
 	return model.LoginInfo{}, "", false

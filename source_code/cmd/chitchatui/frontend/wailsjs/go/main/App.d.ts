@@ -56,22 +56,6 @@ export function GetSetupRecipe(arg1:string):Promise<any>;
 
 export function RunSiteRecipe(arg1:string,arg2:string):Promise<any>;
 
-export function StartSite(arg1:string):Promise<void>;
-
-export function StopSite(arg1:string):Promise<void>;
-
-export function StartSelected(arg1:Array<string>):Promise<void>;
-
-export function StopAll():Promise<void>;
-
-export function GetStatus(arg1:string):Promise<any>;
-
-export function GetAllStatuses():Promise<Record<string, any>>;
-
-export function PauseSite(arg1:string,arg2:string):Promise<void>;
-
-export function RestartSite(arg1:string):Promise<void>;
-
 export function LoadMessageFolder():Promise<Array<string>>;
 
 export function OpenAPIChatDataFolder():Promise<string>;
@@ -120,7 +104,33 @@ export function StartBot():Promise<void>;
 
 export function StartLocalTestChat(arg1:string,arg2:model.MessageSettings):Promise<any>;
 
+export function StartSite(arg1:string):Promise<void>;
+
+export function StartSelected(arg1:Array<string>):Promise<void>;
+
+export function StartSites(arg1:Array<string>):Promise<void>;
+
+export function StartAll():Promise<void>;
+
 export function StopBot():Promise<void>;
+
+export function StopSite(arg1:string):Promise<void>;
+
+export function StopSites(arg1:Array<string>):Promise<void>;
+
+export function StopAll():Promise<void>;
+
+export function GetStatus(arg1:string):Promise<any>;
+
+export function GetAllStatuses():Promise<{[key: string]: any}>;
+
+export function GetSiteStatuses():Promise<{[key: string]: any}>;
+
+export function GetSiteChatHistory(arg1:string):Promise<Array<any>>;
+
+export function PauseSite(arg1:string,arg2:string):Promise<void>;
+
+export function RestartSite(arg1:string):Promise<void>;
 
 export function TestAPIChat(arg1:model.MessageSettings):Promise<string>;
 

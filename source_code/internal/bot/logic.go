@@ -590,6 +590,47 @@ func processDMAutoResponses(
 	return workDone, nil
 }
 
+// LoadSiteAccountState loads the persisted BotState and AccountState for currentUserID
+// from the site's isolated profiles/<profile>/bot_state.json file.
+func LoadSiteAccountState(cfg Config, currentUserID string) (model.BotState, string, model.AccountState, error) {
+	p := profilePaths(cfg)
+	if err := store.EnsureDir(p.ProfileDir); err != nil {
+		return nil, "", model.AccountState{}, err
+	}
+	return loadBotAccountState(p.BotState, currentUserID)
+}
+
+// SaveSiteAccountState saves the updated AccountState into the site's isolated
+// profiles/<profile>/bot_state.json file.
+func SaveSiteAccountState(cfg Config, state model.BotState, accountKey string, accountState model.AccountState) error {
+	p := profilePaths(cfg)
+	if err := store.EnsureDir(p.ProfileDir); err != nil {
+		return err
+	}
+	return saveBotAccountState(p.BotState, state, accountKey, accountState)
+}
+
+// ProcessRealtimeEvent processes a single RealtimeEvent using the site's isolated
+// configuration and state files.
+func ProcessRealtimeEvent(
+	ctx context.Context,
+	cfg Config,
+	login model.LoginInfo,
+	currentUserID string,
+	event RealtimeEvent,
+	rng *rand.Rand,
+) (bool, error) {
+	p := profilePaths(cfg)
+	if err := store.EnsureDir(p.ProfileDir); err != nil {
+		return false, err
+	}
+	if rng == nil {
+		rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+	client := api.New(login, cfg.AppURL, cfg.ProxyRotator)
+	return processRealtimeConversationEvent(ctx, client, cfg, p, login, currentUserID, event, rng)
+}
+
 func loadBotAccountState(path string, currentUserID string) (model.BotState, string, model.AccountState, error) {
 	var state model.BotState
 	ok, err := store.LoadJSON(path, &state)

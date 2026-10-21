@@ -3,6 +3,10 @@ package runner
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -403,5 +407,197 @@ func TestRunnerExecutesBotChatModesAndBrowserConnectionInIsolatedSiteFolder(t *t
 	}
 	if !wasClosed {
 		t.Fatal("expected fakeBrowser.Close() to be called when StopSite completed")
+	}
+}
+
+func TestSupervisorWiresWebSocketSiteToRealtimeGoAndIsolatedFolder(t *testing.T) {
+	dataDir := t.TempDir()
+	if _, err := sites.EnsureSites(dataDir); err != nil {
+		t.Fatalf("EnsureSites: %v", err)
+	}
+	st, err := settings.Open(dataDir)
+	if err != nil {
+		t.Fatalf("settings.Open: %v", err)
+	}
+
+	evaMode := model.ChatModeEVAChat
+	if _, err := st.SaveOverride(sites.DefaultSiteID, settings.Override{MessageMode: &evaMode}); err != nil {
+		t.Fatalf("SaveOverride: %v", err)
+	}
+
+	sup := NewSupervisor(Options{
+		DataDir:       dataDir,
+		SettingsStore: st,
+		CycleInterval: 15 * time.Millisecond,
+	})
+	defer func() { _ = sup.StopAll() }()
+
+	packet := `42["chatMessage",{"message":{"id":"ws-msg-1","conversationId":"ws-conv-99","author":{"id":"traffic-user-77","username":"WsStranger"},"content":"19 m usa"}}]`
+	if err := sup.PushRealtimePacket(sites.DefaultSiteID, packet); err != nil {
+		t.Fatalf("PushRealtimePacket: %v", err)
+	}
+
+	if err := sup.StartSite(sites.DefaultSiteID); err != nil {
+		t.Fatalf("StartSite(chitchat): %v", err)
+	}
+
+	waitUntil(t, 3*time.Second, func() bool {
+		status, _ := sup.GetStatus(sites.DefaultSiteID)
+		return status.Stats.CyclesCompleted >= 2 && status.Stats.MessagesSent >= 2
+	}, "chitchat WebSocket runner to process realtime.go packet and send EVA replies")
+
+	status, err := sup.GetStatus(sites.DefaultSiteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Transport != TransportWebSocket {
+		t.Fatalf("expected transport %q, got %q", TransportWebSocket, status.Transport)
+	}
+	if !strings.Contains(status.Stats.LastReplyRule, "EVA(websocket)") {
+		t.Fatalf("expected EVA(websocket) reply rule, got %q", status.Stats.LastReplyRule)
+	}
+
+	history, err := ReadSiteChatHistory(dataDir, sites.DefaultSiteID)
+	if err != nil {
+		t.Fatalf("ReadSiteChatHistory: %v", err)
+	}
+	if len(history) < 2 {
+		t.Fatalf("expected chat_history.jsonl in sites/chitchat/logs/ to contain >= 2 entries, got %d", len(history))
+	}
+	foundIncoming := false
+	for _, entry := range history {
+		if entry.Direction == "in" && entry.Message == "19 m usa" && entry.PartnerID == "traffic-user-77" {
+			foundIncoming = true
+		}
+		if entry.SiteID != sites.DefaultSiteID {
+			t.Fatalf("unexpected site_id %q in sites/chitchat/logs/chat_history.jsonl", entry.SiteID)
+		}
+	}
+	if !foundIncoming {
+		t.Fatalf("expected incoming realtime.go message in sites/chitchat/logs/chat_history.jsonl, got %+v", history)
+	}
+}
+
+func TestSupervisorWiresAllEnginesAndStopSitesAndIsolatedFolders(t *testing.T) {
+	dataDir := t.TempDir()
+	if _, err := sites.EnsureSites(dataDir); err != nil {
+		t.Fatalf("EnsureSites: %v", err)
+	}
+	st, err := settings.Open(dataDir)
+	if err != nil {
+		t.Fatalf("settings.Open: %v", err)
+	}
+
+	// Mock OpenAI-compatible HTTP server for API Chat mode (api_chat.go).
+	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"hey im 19 f usa hbu"}}],"usage":{"total_tokens":12}}`)
+	}))
+	defer aiServer.Close()
+
+	// Configure:
+	// - omezy: Single Sequence mode (message_sequence.go)
+	// - chatib: EVAChat mode (eva_chat.go)
+	// - y99: API Chat mode (api_chat.go)
+	seqMode := model.ChatModeSingle
+	if _, err := st.SaveOverride("omezy", settings.Override{MessageMode: &seqMode}); err != nil {
+		t.Fatal(err)
+	}
+	evaMode := model.ChatModeEVAChat
+	if _, err := st.SaveOverride("chatib", settings.Override{MessageMode: &evaMode}); err != nil {
+		t.Fatal(err)
+	}
+	apiMode := model.ChatModeAPI
+	if _, err := st.SaveOverride("y99", settings.Override{
+		MessageMode: &apiMode,
+		API: &settings.APISettings{
+			Enabled:     true,
+			BaseURL:     aiServer.URL + "/v1",
+			APIKey:      "test-api-key",
+			Model:       "test-model",
+			Temperature: 0.7,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	sup := NewSupervisor(Options{
+		DataDir:       dataDir,
+		SettingsStore: st,
+		CycleInterval: 15 * time.Millisecond,
+	})
+	defer func() { _ = sup.StopAll() }()
+
+	targetSites := []string{"omezy", "chatib", "y99", "chatblink"}
+	if err := sup.StartSites(targetSites); err != nil {
+		t.Fatalf("StartSites: %v", err)
+	}
+
+	waitUntil(t, 4*time.Second, func() bool {
+		statuses := sup.GetSiteStatuses()
+		for _, id := range targetSites {
+			s := statuses[id]
+			if !s.Running || s.Stats.CyclesCompleted < 2 || s.Stats.MessagesSent < 1 {
+				return false
+			}
+		}
+		return true
+	}, "all 4 sites (Sequence, EVA, API, DOM) to complete >= 2 cycles")
+
+	statuses := sup.GetSiteStatuses()
+	if !strings.Contains(statuses["omezy"].Stats.LastReplyRule, "SEQ(") {
+		t.Fatalf("expected omezy to run message_sequence.go, got rule %q", statuses["omezy"].Stats.LastReplyRule)
+	}
+	if !strings.Contains(statuses["chatib"].Stats.LastReplyRule, "EVA(") {
+		t.Fatalf("expected chatib to run eva_chat.go, got rule %q", statuses["chatib"].Stats.LastReplyRule)
+	}
+	if !strings.Contains(statuses["y99"].Stats.LastReplyRule, "API(") {
+		t.Fatalf("expected y99 to run api_chat.go, got rule %q", statuses["y99"].Stats.LastReplyRule)
+	}
+	if statuses["chatblink"].Transport != TransportDOM {
+		t.Fatalf("expected chatblink transport %q, got %q", TransportDOM, statuses["chatblink"].Transport)
+	}
+
+	// Test StopSites stops only omezy and chatib while y99 and chatblink keep running.
+	if err := sup.StopSites([]string{"omezy", "chatib"}); err != nil {
+		t.Fatalf("StopSites: %v", err)
+	}
+	afterStop := sup.GetSiteStatuses()
+	if afterStop["omezy"].Running || afterStop["chatib"].Running {
+		t.Fatalf("expected omezy and chatib stopped, got omezy=%v chatib=%v", afterStop["omezy"].Running, afterStop["chatib"].Running)
+	}
+	if !afterStop["y99"].Running || !afterStop["chatblink"].Running {
+		t.Fatalf("expected y99 and chatblink still running, got y99=%v chatblink=%v", afterStop["y99"].Running, afterStop["chatblink"].Running)
+	}
+
+	// Verify session load, bot_state.json, runner.jsonl, and chat_history.jsonl live strictly inside each site's folder.
+	for _, id := range targetSites {
+		stItem := afterStop[id]
+		siteCtx, err := sites.NewSiteContext(dataDir, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for label, p := range map[string]string{
+			"SessionPath":     stItem.SessionPath,
+			"BotStatePath":    stItem.BotStatePath,
+			"ChatHistoryPath": stItem.ChatHistoryPath,
+			"LogPath":         stItem.LogPath,
+		} {
+			if !sites.PathWithin(siteCtx.FolderPath, p) {
+				t.Fatalf("%s for %s (%q) is outside site folder %q", label, id, p, siteCtx.FolderPath)
+			}
+			if _, statErr := os.Stat(p); statErr != nil {
+				t.Fatalf("expected %s file %q to exist for %s: %v", label, p, id, statErr)
+			}
+		}
+		hist, err := ReadSiteChatHistory(dataDir, id)
+		if err != nil || len(hist) == 0 {
+			t.Fatalf("expected non-empty chat_history.jsonl for %s, got len=%d err=%v", id, len(hist), err)
+		}
+		for _, entry := range hist {
+			if entry.SiteID != id {
+				t.Fatalf("cross-site contamination in %s chat_history.jsonl: found site_id=%q", id, entry.SiteID)
+			}
+		}
 	}
 }

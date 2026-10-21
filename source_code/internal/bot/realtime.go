@@ -86,6 +86,8 @@ func fetchCurrentReleaseFromWeb() string {
 	return fallback
 }
 
+type RealtimeEvent = realtimeEvent
+
 type realtimeEvent struct {
 	Type           string
 	ConversationID string
@@ -99,6 +101,50 @@ type realtimeEvent struct {
 	InQueue        bool
 	HasQueueState  bool
 	Target         model.DMTarget
+}
+
+// StartRealtimeListener starts the WebSocket listener goroutine for a site
+// using the site's isolated Config and login session.
+func StartRealtimeListener(
+	parent context.Context,
+	cfg Config,
+	login model.LoginInfo,
+	currentUserID string,
+) (<-chan RealtimeEvent, context.CancelFunc) {
+	return startRealtimeListener(parent, cfg, login, currentUserID)
+}
+
+// ConnectRealtimeSocket connects and reads from a site's WebSocket endpoint.
+func ConnectRealtimeSocket(
+	ctx context.Context,
+	cfg Config,
+	login model.LoginInfo,
+	currentUserID string,
+	events chan<- RealtimeEvent,
+) error {
+	return connectRealtimeSocket(ctx, cfg, login, currentUserID, events)
+}
+
+// ParseRealtimeEvent parses an Engine.IO / Socket.IO event packet ("42[...]").
+func ParseRealtimeEvent(packet string, currentUserID string) (RealtimeEvent, bool, error) {
+	return parseRealtimeEvent(packet, currentUserID)
+}
+
+// ShouldWakeForRealtimeEvent reports whether a realtime event requires immediate bot processing.
+func ShouldWakeForRealtimeEvent(currentUserID string, event RealtimeEvent) bool {
+	return shouldWakeForRealtimeEvent(currentUserID, event)
+}
+
+func effectiveRealtimeSocketURL(cfg Config) string {
+	if u := strings.TrimSpace(cfg.WebSocketURL); u != "" {
+		return u
+	}
+	if apiURL := strings.TrimSpace(cfg.APIBaseURL); apiURL != "" {
+		if strings.HasPrefix(apiURL, "ws://") || strings.HasPrefix(apiURL, "wss://") {
+			return apiURL
+		}
+	}
+	return realtimeSocketURL
 }
 
 func startRealtimeListener(
@@ -181,8 +227,9 @@ func connectRealtimeSocket(
 		return err
 	}
 
-	headers := realtimeHeaders(login, token)
-	conn, resp, err := dialer.DialContext(ctx, realtimeSocketURL, headers)
+	headers := realtimeHeadersForConfig(cfg, login, token)
+	socketURL := effectiveRealtimeSocketURL(cfg)
+	conn, resp, err := dialer.DialContext(ctx, socketURL, headers)
 	if err != nil {
 		if resp != nil {
 			return &badStatusError{status: resp.StatusCode, err: err}
@@ -381,13 +428,22 @@ func dialWithChromeUTLS(ctx context.Context, network, addr string, entry *proxyp
 }
 
 func realtimeHeaders(login model.LoginInfo, token string) http.Header {
+	return realtimeHeadersForConfig(Config{}, login, token)
+}
+
+func realtimeHeadersForConfig(cfg Config, login model.LoginInfo, token string) http.Header {
 	userAgent := strings.TrimSpace(login.UserAgent)
 	if userAgent == "" {
 		userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 	}
 
+	origin := strings.TrimRight(strings.TrimSpace(cfg.AppURL), "/")
+	if origin == "" {
+		origin = "https://app.chitchat.gg"
+	}
+
 	headers := http.Header{}
-	headers.Set("Origin", "https://app.chitchat.gg")
+	headers.Set("Origin", origin)
 	headers.Set("User-Agent", userAgent)
 	headers.Set("Accept-Language", "en-US,en;q=0.9")
 	cookieHeader := login.CookieHeader()

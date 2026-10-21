@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"chitchatbot/internal/proxy"
 	"chitchatbot/internal/settings"
 	"chitchatbot/internal/sites"
+	"chitchatbot/internal/store"
 )
 
 // Runner lifecycle states.
@@ -31,6 +33,13 @@ const (
 	StatusStopping = "stopping"
 	StatusStopped  = "stopped"
 	StatusFailed   = "failed"
+)
+
+// Canonical site transport modes wired to the existing bot/browser engines (Prompt 6).
+const (
+	TransportWebSocket = "websocket" // -> internal/bot/realtime.go
+	TransportAPI       = "api"       // -> internal/bot/api_chat.go & logic.go
+	TransportDOM       = "dom"       // -> internal/browser/domchat.go
 )
 
 // Canonical runner error types (Prompt 5).
@@ -160,6 +169,33 @@ func ClassifyRunnerError(err error) string {
 	}
 }
 
+// ResolveSiteTransport determines which existing transport engine handles a site:
+//   - "websocket" -> internal/bot/realtime.go
+//   - "api"       -> internal/bot/api_chat.go & logic.go
+//   - "dom"       -> internal/browser/domchat.go
+func ResolveSiteTransport(siteCfg sites.Config, botCfg bot.Config, useLiveBrowser bool) string {
+	if useLiveBrowser {
+		return TransportDOM
+	}
+	hasWSProbe := siteCfg.Classification.Probe != nil && siteCfg.Classification.Probe.HasWebSocket
+	if strings.TrimSpace(botCfg.WebSocketURL) != "" ||
+		hasWSProbe ||
+		siteCfg.ID == sites.DefaultSiteID {
+		return TransportWebSocket
+	}
+	switch strings.ToUpper(strings.TrimSpace(siteCfg.Classification.Group)) {
+	case sites.GroupA, sites.GroupB:
+		return TransportAPI
+	case sites.GroupC, sites.GroupD, sites.GroupE:
+		return TransportDOM
+	}
+	if strings.EqualFold(strings.TrimSpace(siteCfg.AuthMode), "email_magic_link") ||
+		strings.TrimSpace(siteCfg.APIBaseURL) != "" {
+		return TransportAPI
+	}
+	return TransportDOM
+}
+
 // Notification represents a UI notification event emitted by the Supervisor
 // (e.g. when a site auto-pauses after 5 consecutive errors or crashes).
 type Notification struct {
@@ -190,6 +226,7 @@ type SiteStatus struct {
 	SiteName          string         `json:"site_name"`
 	Group             string         `json:"group"`
 	GroupName         string         `json:"group_name"`
+	Transport         string         `json:"transport"`
 	Status            string         `json:"status"` // "idle", "starting", "running", "paused", "stopping", "stopped", "failed"
 	Running           bool           `json:"running"`
 	Paused            bool           `json:"paused"`
@@ -200,6 +237,8 @@ type SiteStatus struct {
 	Profile           string         `json:"profile"`
 	FolderPath        string         `json:"folder_path"`
 	SessionPath       string         `json:"session_path,omitempty"`
+	BotStatePath      string         `json:"bot_state_path,omitempty"`
+	ChatHistoryPath   string         `json:"chat_history_path,omitempty"`
 	LogPath           string         `json:"log_path"`
 	ErrorLogPath      string         `json:"error_log_path"`
 	ConsecutiveErrors int            `json:"consecutive_errors"`
@@ -218,6 +257,7 @@ type SiteStatus struct {
 type CycleContext struct {
 	SiteID       string
 	Profile      string
+	Transport    string
 	CycleNumber  int
 	SiteCtx      sites.SiteContext
 	SiteCfg      sites.Config
@@ -260,15 +300,21 @@ type Options struct {
 }
 
 type siteRunner struct {
-	mu          sync.Mutex
-	siteID      string
-	siteCtx     sites.SiteContext
-	siteCfg     sites.Config
-	status      SiteStatus
-	cancel      context.CancelFunc
-	done        chan struct{}
-	browserConn browser.Backend
-	chatSession *bot.LocalChatSession
+	mu              sync.Mutex
+	siteID          string
+	siteCtx         sites.SiteContext
+	siteCfg         sites.Config
+	status          SiteStatus
+	cancel          context.CancelFunc
+	done            chan struct{}
+	browserConn     browser.Backend
+	chatSession     *bot.LocalChatSession
+	realtimeEvents  <-chan bot.RealtimeEvent
+	realtimeStop    context.CancelFunc
+	injectedPackets chan string
+	rng             *rand.Rand
+	domSeenIDs      map[string]bool
+	domConvID       string
 }
 
 func (sr *siteRunner) snapshot() SiteStatus {
@@ -327,13 +373,13 @@ func NewSupervisor(opts Options) *Supervisor {
 	if bf == nil {
 		bf = browser.New
 	}
-	store := opts.SettingsStore
-	if store == nil && strings.TrimSpace(opts.DataDir) != "" {
-		store, _ = settings.Open(opts.DataDir)
+	st := opts.SettingsStore
+	if st == nil && strings.TrimSpace(opts.DataDir) != "" {
+		st, _ = settings.Open(opts.DataDir)
 	}
 	return &Supervisor{
 		dataDir:              filepath.Clean(strings.TrimSpace(opts.DataDir)),
-		settingsStore:        store,
+		settingsStore:        st,
 		maxConsecutiveErrors: maxErr,
 		cycleInterval:        interval,
 		defaultProfile:       profile,
@@ -376,6 +422,7 @@ func (s *Supervisor) getOrCreateRunner(siteID string) (*siteRunner, error) {
 			Selectors:   sites.ArchetypeSelectors("family_a"),
 		}
 		siteCfg.Classification = sites.InitialClassification(siteCfg)
+		_ = siteCtx.SaveJSON("site.json", siteCfg)
 	}
 
 	s.mu.Lock()
@@ -387,26 +434,68 @@ func (s *Supervisor) getOrCreateRunner(siteID string) (*siteRunner, error) {
 
 	logPath, _ := siteCtx.Resolve(filepath.Join("logs", RunnerLogFileName))
 	errLogPath, _ := siteCtx.Resolve(filepath.Join("logs", RunnerErrorLogFileName))
+	chatHistPath, _ := siteCtx.Resolve(filepath.Join("logs", bot.SiteChatHistoryFileName))
+	botStatePath, _ := siteCtx.Resolve(filepath.Join("profiles", s.defaultProfile, "bot_state.json"))
+	transport := ResolveSiteTransport(siteCfg, bot.Config{}, s.useLiveBrowser)
 
 	sr := &siteRunner{
-		siteID:  siteCtx.SiteID,
-		siteCtx: siteCtx,
-		siteCfg: siteCfg,
+		siteID:          siteCtx.SiteID,
+		siteCtx:         siteCtx,
+		siteCfg:         siteCfg,
+		injectedPackets: make(chan string, 64),
+		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
+		domSeenIDs:      make(map[string]bool),
 		status: SiteStatus{
-			SiteID:       siteCtx.SiteID,
-			SiteName:     siteCfg.Name,
-			Group:        siteCfg.Classification.Group,
-			GroupName:    siteCfg.Classification.GroupName,
-			Status:       StatusIdle,
-			Profile:      s.defaultProfile,
-			FolderPath:   siteCtx.FolderPath,
-			LogPath:      logPath,
-			ErrorLogPath: errLogPath,
-			ErrorCounts:  make(map[string]int),
+			SiteID:          siteCtx.SiteID,
+			SiteName:        siteCfg.Name,
+			Group:           siteCfg.Classification.Group,
+			GroupName:       siteCfg.Classification.GroupName,
+			Transport:       transport,
+			Status:          StatusIdle,
+			Profile:         s.defaultProfile,
+			FolderPath:      siteCtx.FolderPath,
+			BotStatePath:    botStatePath,
+			ChatHistoryPath: chatHistPath,
+			LogPath:         logPath,
+			ErrorLogPath:    errLogPath,
+			ErrorCounts:     make(map[string]int),
 		},
 	}
 	s.runners[siteCtx.SiteID] = sr
 	return sr, nil
+}
+
+// ReloadSiteConfig refreshes a site's Config from sites/<site_id>/site.json.
+func (s *Supervisor) ReloadSiteConfig(siteID string) error {
+	sr, err := s.getOrCreateRunner(siteID)
+	if err != nil {
+		return err
+	}
+	if loaded, loadErr := sites.LoadSite(s.dataDir, sr.siteID); loadErr == nil {
+		sr.mu.Lock()
+		sr.siteCfg = loaded
+		sr.status.SiteName = loaded.Name
+		sr.status.Group = loaded.Classification.Group
+		sr.status.GroupName = loaded.Classification.GroupName
+		sr.status.Transport = ResolveSiteTransport(loaded, bot.Config{}, s.useLiveBrowser)
+		sr.mu.Unlock()
+	}
+	return nil
+}
+
+// PushRealtimePacket queues an Engine.IO / Socket.IO packet ("42[...]") for a
+// WebSocket site runner to parse and process via internal/bot/realtime.go.
+func (s *Supervisor) PushRealtimePacket(siteID, packet string) error {
+	sr, err := s.getOrCreateRunner(siteID)
+	if err != nil {
+		return err
+	}
+	select {
+	case sr.injectedPackets <- packet:
+		return nil
+	default:
+		return errors.New("realtime packet queue is full")
+	}
 }
 
 // StartSite launches an isolated goroutine with its own context for siteID.
@@ -414,6 +503,15 @@ func (s *Supervisor) StartSite(siteID string) error {
 	sr, err := s.getOrCreateRunner(siteID)
 	if err != nil {
 		return err
+	}
+
+	if loaded, loadErr := sites.LoadSite(s.dataDir, sr.siteID); loadErr == nil {
+		sr.mu.Lock()
+		sr.siteCfg = loaded
+		sr.status.SiteName = loaded.Name
+		sr.status.Group = loaded.Classification.Group
+		sr.status.GroupName = loaded.Classification.GroupName
+		sr.mu.Unlock()
 	}
 
 	sr.mu.Lock()
@@ -447,10 +545,16 @@ func (s *Supervisor) StartSite(siteID string) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	transport := ResolveSiteTransport(sr.siteCfg, botCfg, s.useLiveBrowser)
+	botPaths := bot.ProfilePaths(botCfg)
+	chatHistPath, _ := sr.siteCtx.Resolve(filepath.Join("logs", bot.SiteChatHistoryFileName))
 
 	sr.cancel = cancel
 	sr.done = done
 	sr.chatSession = chatSession
+	sr.domSeenIDs = make(map[string]bool)
+	sr.domConvID = ""
+	sr.status.Transport = transport
 	sr.status.Status = StatusRunning
 	sr.status.Running = true
 	sr.status.Paused = false
@@ -459,6 +563,8 @@ func (s *Supervisor) StartSite(siteID string) error {
 	sr.status.PauseReason = ""
 	sr.status.ChatMode = botCfg.ChatMode
 	sr.status.SessionPath = sessionPath
+	sr.status.BotStatePath = botPaths.BotState
+	sr.status.ChatHistoryPath = chatHistPath
 	sr.status.ConsecutiveErrors = 0
 	sr.status.StartedAt = now
 	sr.status.StoppedAt = ""
@@ -466,22 +572,25 @@ func (s *Supervisor) StartSite(siteID string) error {
 	sr.mu.Unlock()
 
 	appendSiteRunnerLog(sr.siteCtx, "runner_started", map[string]any{
-		"site_id":      sr.siteID,
-		"chat_mode":    botCfg.ChatMode,
-		"profile":      botCfg.Profile,
-		"session_path": sessionPath,
-		"folder_path":  sr.siteCtx.FolderPath,
+		"site_id":           sr.siteID,
+		"transport":         transport,
+		"chat_mode":         botCfg.ChatMode,
+		"profile":           botCfg.Profile,
+		"session_path":      sessionPath,
+		"bot_state_path":    botPaths.BotState,
+		"chat_history_path": chatHistPath,
+		"folder_path":       sr.siteCtx.FolderPath,
 	})
 	s.notify(Notification{
 		SiteID:    sr.siteID,
 		SiteName:  siteName,
 		Level:     "info",
 		Event:     "started",
-		Reason:    fmt.Sprintf("Started isolated runner for %s (mode=%s)", sr.siteID, botCfg.ChatMode),
+		Reason:    fmt.Sprintf("Started isolated runner for %s (transport=%s mode=%s)", sr.siteID, transport, botCfg.ChatMode),
 		Timestamp: now,
 	})
 
-	go s.runSiteLoop(runCtx, done, sr, eff, botCfg, login)
+	go s.runSiteLoop(runCtx, done, sr, eff, botCfg, login, transport)
 	return nil
 }
 
@@ -541,6 +650,58 @@ func (s *Supervisor) StopSite(siteID string) error {
 		})
 	}
 	return nil
+}
+
+// StartSites starts multiple isolated site runners (Prompt 6 alias for StartSelected).
+func (s *Supervisor) StartSites(siteIDs []string) error {
+	return s.StartSelected(siteIDs)
+}
+
+// StopSites cleanly stops the specified list of site runners in parallel without
+// affecting any other running sites (Prompt 6).
+func (s *Supervisor) StopSites(siteIDs []string) error {
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		msgs []string
+	)
+	for _, rawID := range siteIDs {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(siteID string) {
+			defer wg.Done()
+			if err := s.StopSite(siteID); err != nil {
+				mu.Lock()
+				msgs = append(msgs, fmt.Sprintf("%s: %v", siteID, err))
+				mu.Unlock()
+			}
+		}(id)
+	}
+	wg.Wait()
+	if len(msgs) > 0 {
+		sort.Strings(msgs)
+		return errors.New(strings.Join(msgs, "; "))
+	}
+	return nil
+}
+
+// StartAll discovers all enabled sites in s.dataDir and starts each in its own
+// isolated goroutine (Prompt 6).
+func (s *Supervisor) StartAll() error {
+	catalog, err := sites.List(s.dataDir)
+	if err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(catalog))
+	for _, cfg := range catalog {
+		if cfg.Enabled {
+			ids = append(ids, cfg.ID)
+		}
+	}
+	return s.StartSelected(ids)
 }
 
 // StartSelected starts multiple isolated site runners in parallel.
@@ -713,6 +874,11 @@ func (s *Supervisor) GetAllStatuses() map[string]SiteStatus {
 	return out
 }
 
+// GetSiteStatuses returns a map of siteID -> SiteStatus for all tracked sites (Prompt 6).
+func (s *Supervisor) GetSiteStatuses() map[string]SiteStatus {
+	return s.GetAllStatuses()
+}
+
 func (s *Supervisor) runSiteLoop(
 	ctx context.Context,
 	done chan struct{},
@@ -720,14 +886,21 @@ func (s *Supervisor) runSiteLoop(
 	eff settings.Effective,
 	botCfg bot.Config,
 	login model.LoginInfo,
+	transport string,
 ) {
 	defer close(done)
 	defer func() {
-		// Clean up any per-site browser connection on exit.
+		// Clean up any per-site browser connection or WebSocket listener on exit.
 		sr.mu.Lock()
 		b := sr.browserConn
 		sr.browserConn = nil
+		rtStop := sr.realtimeStop
+		sr.realtimeStop = nil
+		sr.realtimeEvents = nil
 		sr.mu.Unlock()
+		if rtStop != nil {
+			rtStop()
+		}
 		if b != nil {
 			_ = b.Close()
 		}
@@ -798,6 +971,7 @@ func (s *Supervisor) runSiteLoop(
 		cc := &CycleContext{
 			SiteID:       sr.siteID,
 			Profile:      botCfg.Profile,
+			Transport:    transport,
 			CycleNumber:  cycleNum,
 			SiteCtx:      sr.siteCtx,
 			SiteCfg:      sr.siteCfg,
@@ -839,6 +1013,8 @@ func (s *Supervisor) runSiteLoop(
 
 			appendSiteRunnerLog(sr.siteCtx, "runner_cycle_ok", map[string]any{
 				"cycle":             cycleNum,
+				"transport":         transport,
+				"chat_mode":         botCfg.ChatMode,
 				"messages_sent":     cycleRes.MessagesSent,
 				"messages_received": cycleRes.MessagesReceived,
 				"last_reply_rule":   cycleRes.LastReplyRule,
@@ -859,42 +1035,332 @@ func (s *Supervisor) executeOneCycle(ctx context.Context, sr *siteRunner, cc *Cy
 	}
 
 	// If live browser execution is enabled for this supervisor, connect via
-	// internal/browser using this site's isolated profile directory.
+	// internal/browser/domchat.go using this site's isolated profile directory.
 	if s.useLiveBrowser {
 		return s.executeBrowserDOMCycle(ctx, sr, cc)
 	}
 
-	// Default isolated cycle using internal/bot's chat logic (Sequence, Folder, EVAChat, or API Chat)
-	// and the site's isolated session in sites/<site_id>/.
-	if cc.ChatSession == nil {
-		return CycleResult{}, NewRunnerError(ErrorTypeConnection, "chat session not initialized", nil)
+	// Dispatch by site transport type (Prompt 6):
+	//   * WebSocket site -> existing realtime.go
+	//   * API site       -> existing api_chat.go / logic.go
+	//   * DOM site       -> existing domchat.go
+	switch cc.Transport {
+	case TransportWebSocket:
+		return s.executeWebSocketSiteCycle(ctx, sr, cc)
+	case TransportAPI:
+		return s.executeAPISiteCycle(ctx, sr, cc)
+	default:
+		return s.executeDOMSiteCycle(ctx, sr, cc)
+	}
+}
+
+// executeWebSocketSiteCycle wires WebSocket sites to internal/bot/realtime.go.
+func (s *Supervisor) executeWebSocketSiteCycle(ctx context.Context, sr *siteRunner, cc *CycleContext) (CycleResult, error) {
+	currentUserID := strings.TrimSpace(cc.Login.CurrentUserID())
+	if currentUserID == "" {
+		currentUserID = cc.SiteID + "_" + cc.Profile
 	}
 
-	var turn bot.LocalChatTurn
-	if cc.CycleNumber == 1 {
-		turn = cc.ChatSession.Start(ctx)
-	} else {
-		turn = cc.ChatSession.Reply(ctx, "hey how are you doing?")
+	// Start the realtime.go listener if a custom WebSocketURL is configured on BotCfg.
+	sr.mu.Lock()
+	hasListener := sr.realtimeEvents != nil
+	sr.mu.Unlock()
+	if !hasListener && strings.TrimSpace(cc.BotCfg.WebSocketURL) != "" && cc.Login.Token() != "" {
+		events, stopRealtime := bot.StartRealtimeListener(ctx, cc.BotCfg, cc.Login, currentUserID)
+		sr.mu.Lock()
+		sr.realtimeEvents = events
+		sr.realtimeStop = stopRealtime
+		sr.mu.Unlock()
 	}
 
-	sentCount := len(turn.Lines)
+	partnerID := fmt.Sprintf("ws_partner_%s", cc.SiteID)
+	partnerName := "ws_stranger"
+	incomingText := ""
+	convID := fmt.Sprintf("ws_conv_%s", cc.SiteID)
+
+	// 1. Check if a raw Engine.IO / Socket.IO packet was queued and parse via realtime.go.
+	select {
+	case rawPacket := <-sr.injectedPackets:
+		ev, ok, err := bot.ParseRealtimeEvent(rawPacket, currentUserID)
+		if err != nil {
+			return CycleResult{}, NewRunnerError(ErrorTypeConnection, "realtime packet parse failed", err)
+		}
+		if ok && bot.ShouldWakeForRealtimeEvent(currentUserID, ev) {
+			if ev.ConversationID != "" {
+				convID = ev.ConversationID
+			}
+			if ev.Target.UserID != "" {
+				partnerID = ev.Target.UserID
+			} else if ev.UserID != "" {
+				partnerID = ev.UserID
+			}
+			if ev.Target.Username != "" {
+				partnerName = ev.Target.Username
+			} else if ev.Username != "" {
+				partnerName = ev.Username
+			}
+			incomingText = ev.Content
+		}
+	default:
+		// 2. Also check live realtime.go channel if active.
+		sr.mu.Lock()
+		rtCh := sr.realtimeEvents
+		sr.mu.Unlock()
+		if rtCh != nil {
+			select {
+			case ev := <-rtCh:
+				if bot.ShouldWakeForRealtimeEvent(currentUserID, ev) {
+					if ev.ConversationID != "" {
+						convID = ev.ConversationID
+					}
+					if ev.Target.UserID != "" {
+						partnerID = ev.Target.UserID
+					}
+					if ev.Target.Username != "" {
+						partnerName = ev.Target.Username
+					}
+					incomingText = ev.Content
+				}
+			default:
+			}
+		}
+	}
+
+	if incomingText == "" && cc.CycleNumber > 1 {
+		// Provide a realistic stranger turn via realtime.go's parser so multi-turn
+		// conversations progress through Sequence / EVA / API modes.
+		samplePrompts := []string{
+			"hey there",
+			"19 m usa hbu?",
+			"im from usa wbu",
+			"do u have snap?",
+		}
+		prompt := samplePrompts[(cc.CycleNumber-2)%len(samplePrompts)]
+		packet := fmt.Sprintf(
+			`42["chatMessage",{"message":{"id":"msg_%d","conversationId":%q,"author":{"id":%q,"username":%q},"content":%q}}]`,
+			cc.CycleNumber,
+			convID,
+			partnerID,
+			partnerName,
+			prompt,
+		)
+		if ev, ok, err := bot.ParseRealtimeEvent(packet, currentUserID); err == nil && ok && bot.ShouldWakeForRealtimeEvent(currentUserID, ev) {
+			incomingText = ev.Content
+			partnerID = ev.Target.UserID
+			partnerName = ev.Target.Username
+			convID = ev.ConversationID
+		}
+	}
+
+	return s.executeBotEngineTurn(ctx, sr, cc, convID, partnerID, partnerName, incomingText, TransportWebSocket)
+}
+
+// executeAPISiteCycle wires API sites to internal/bot/api_chat.go & logic.go.
+func (s *Supervisor) executeAPISiteCycle(ctx context.Context, sr *siteRunner, cc *CycleContext) (CycleResult, error) {
+	convID := fmt.Sprintf("api_conv_%s", cc.SiteID)
+	partnerID := fmt.Sprintf("api_partner_%s", cc.SiteID)
+	partnerName := "api_stranger"
+	incomingText := ""
+	if cc.CycleNumber > 1 {
+		samplePrompts := []string{
+			"hi how are you",
+			"21 m canada",
+			"canada hbu",
+			"whats ur snap?",
+		}
+		incomingText = samplePrompts[(cc.CycleNumber-2)%len(samplePrompts)]
+	}
+	return s.executeBotEngineTurn(ctx, sr, cc, convID, partnerID, partnerName, incomingText, TransportAPI)
+}
+
+// executeDOMSiteCycle wires DOM sites to internal/browser/domchat.go when a
+// browser backend is active, or runs the isolated bot engine turn for DOM mode.
+func (s *Supervisor) executeDOMSiteCycle(ctx context.Context, sr *siteRunner, cc *CycleContext) (CycleResult, error) {
+	sr.mu.Lock()
+	hasBrowser := sr.browserConn != nil
+	sr.mu.Unlock()
+	if hasBrowser || s.useLiveBrowser {
+		return s.executeBrowserDOMCycle(ctx, sr, cc)
+	}
+
+	convID := fmt.Sprintf("dom_conv_%s", cc.SiteID)
+	partnerID := fmt.Sprintf("dom_partner_%s", cc.SiteID)
+	partnerName := "dom_stranger"
+	incomingText := ""
+	if cc.CycleNumber > 1 {
+		samplePrompts := []string{
+			"hello",
+			"20 m uk",
+			"from uk",
+			"snap?",
+		}
+		incomingText = samplePrompts[(cc.CycleNumber-2)%len(samplePrompts)]
+	}
+	return s.executeBotEngineTurn(ctx, sr, cc, convID, partnerID, partnerName, incomingText, TransportDOM)
+}
+
+// executeBotEngineTurn executes one conversation turn using the existing bot
+// engines (message_sequence.go, eva_chat.go, api_chat.go) and writes state,
+// chat history, and activity logs strictly inside sites/<site_id>/.
+func (s *Supervisor) executeBotEngineTurn(
+	ctx context.Context,
+	sr *siteRunner,
+	cc *CycleContext,
+	convID string,
+	partnerID string,
+	partnerName string,
+	incomingText string,
+	transport string,
+) (CycleResult, error) {
+	currentUserID := strings.TrimSpace(cc.Login.CurrentUserID())
+	if currentUserID == "" {
+		currentUserID = cc.SiteID + "_" + cc.Profile
+	}
+
+	state, accountKey, accountState, err := bot.LoadSiteAccountState(cc.BotCfg, currentUserID)
+	if err != nil {
+		return CycleResult{}, NewRunnerError(ErrorTypeConnection, "load isolated bot state", err)
+	}
+
+	target := model.DMTarget{
+		ConversationID: convID,
+		UserID:         partnerID,
+		Username:       partnerName,
+		BotUsername:    cc.Profile,
+	}
+	_ = target
+
+	receivedCount := 0
+	if strings.TrimSpace(incomingText) != "" {
+		receivedCount = 1
+		_ = bot.AppendSiteChatHistory(cc.SiteCtx.FolderPath, bot.ChatHistoryEntry{
+			SiteID:         cc.SiteID,
+			Profile:        cc.Profile,
+			BotUserID:      currentUserID,
+			ConversationID: convID,
+			PartnerID:      partnerID,
+			PartnerName:    partnerName,
+			Direction:      "in",
+			Transport:      transport,
+			ChatMode:       cc.BotCfg.ChatMode,
+			Message:        incomingText,
+		})
+	}
+
+	var (
+		lines []string
+		rule  string
+	)
+
+	switch cc.BotCfg.ChatMode {
+	case model.ChatModeEVAChat:
+		// EVA mode -> existing internal/bot/eva_chat.go
+		if cc.BotCfg.EVAChat == nil || cc.BotCfg.EVAChat.Engine == nil {
+			dataRoot, evaErr := bot.EnsureEVAChatData(cc.SiteCtx.FolderPath)
+			if evaErr != nil {
+				return CycleResult{}, NewRunnerError(ErrorTypeConnection, "ensure EVA data in site folder", evaErr)
+			}
+			engine, evaErr := bot.LoadEVAChatEngine(dataRoot)
+			if evaErr != nil {
+				return CycleResult{}, NewRunnerError(ErrorTypeConnection, "load EVA engine from site folder", evaErr)
+			}
+			cc.BotCfg.EVAChat = &bot.EVAChatConfig{DataRoot: dataRoot, Engine: engine}
+		}
+		evaSession := accountState.EVAChatSessions[partnerID]
+		var res bot.EVAReplyResult
+		if !evaSession.Started && strings.TrimSpace(incomingText) == "" {
+			res = bot.EVAChatStartTurn(cc.BotCfg, &accountState, partnerID, sr.rng)
+		} else {
+			if evaSession.Ended {
+				// Start a fresh EVA session for the next conversation cycle.
+				delete(accountState.EVAChatSessions, partnerID)
+			}
+			if strings.TrimSpace(incomingText) == "" {
+				res = bot.EVAChatStartTurn(cc.BotCfg, &accountState, partnerID, sr.rng)
+			} else {
+				res = bot.EVAChatReplyTurn(cc.BotCfg, &accountState, partnerID, incomingText, sr.rng)
+			}
+		}
+		lines = bot.FlowMessageLines(res)
+		rule = fmt.Sprintf("EVA(%s) · %s · %s", transport, res.SourcePool, res.Reason)
+
+	case model.ChatModeAPI:
+		// API mode -> existing internal/bot/api_chat.go
+		if cc.BotCfg.APIChat != nil && cc.BotCfg.APIChat.Engine != nil {
+			apiSession := accountState.APIChatSessions[partnerID]
+			var res bot.EVAReplyResult
+			if !apiSession.Started && strings.TrimSpace(incomingText) == "" {
+				res = bot.APIChatStartTurn(ctx, cc.BotCfg, &accountState, partnerID, sr.rng)
+			} else {
+				res = bot.APIChatReplyTurn(ctx, cc.BotCfg, &accountState, partnerID, incomingText, sr.rng)
+			}
+			lines = bot.FlowMessageLines(res)
+			rule = fmt.Sprintf("API(%s) · %s", transport, res.Reason)
+		} else if cc.ChatSession != nil {
+			var turn bot.LocalChatTurn
+			if cc.CycleNumber == 1 && strings.TrimSpace(incomingText) == "" {
+				turn = cc.ChatSession.Start(ctx)
+			} else {
+				turn = cc.ChatSession.Reply(ctx, incomingText)
+			}
+			lines = turn.Lines
+			rule = fmt.Sprintf("API(%s) · %s", transport, turn.Reason)
+		}
+
+	default:
+		// Sequence mode (Single Sequence & Folder Sequences) -> existing internal/bot/message_sequence.go
+		seqRes := bot.ExecuteSequenceTurn(cc.BotCfg, &accountState, partnerID, sr.rng)
+		if seqRes.Ended && len(seqRes.Lines) == 0 {
+			// Reset sequence counter for the next conversation partner and start opener.
+			accountState.SentMessageCounts[partnerID] = 0
+			seqRes = bot.ExecuteSequenceTurn(cc.BotCfg, &accountState, partnerID, sr.rng)
+		}
+		lines = seqRes.Lines
+		rule = fmt.Sprintf("SEQ(%s) · %s", transport, seqRes.Rule)
+	}
+
+	if err := bot.SaveSiteAccountState(cc.BotCfg, state, accountKey, accountState); err != nil {
+		return CycleResult{}, NewRunnerError(ErrorTypeConnection, "save isolated bot state", err)
+	}
+
 	lastSent := ""
-	if sentCount > 0 {
-		lastSent = turn.Lines[sentCount-1]
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		lastSent = line
+		_ = bot.AppendSiteChatHistory(cc.SiteCtx.FolderPath, bot.ChatHistoryEntry{
+			SiteID:         cc.SiteID,
+			Profile:        cc.Profile,
+			BotUserID:      currentUserID,
+			ConversationID: convID,
+			PartnerID:      partnerID,
+			PartnerName:    partnerName,
+			Direction:      "out",
+			Transport:      transport,
+			ChatMode:       cc.BotCfg.ChatMode,
+			Rule:           rule,
+			Message:        line,
+		})
 	}
+
 	convs := 0
 	if cc.CycleNumber == 1 {
 		convs = 1
 	}
 	return CycleResult{
-		MessagesSent:     sentCount,
-		MessagesReceived: 1,
+		MessagesSent:     len(lines),
+		MessagesReceived: receivedCount,
 		Conversations:    convs,
-		LastReplyRule:    turn.Reason,
+		LastReplyRule:    rule,
 		LastMessageSent:  lastSent,
 	}, nil
 }
 
+// executeBrowserDOMCycle connects to internal/browser/domchat.go using the site's
+// isolated profile directory and routes incoming DOM messages through the existing
+// bot engines (message_sequence.go, eva_chat.go, api_chat.go).
 func (s *Supervisor) executeBrowserDOMCycle(ctx context.Context, sr *siteRunner, cc *CycleContext) (CycleResult, error) {
 	sr.mu.Lock()
 	b := sr.browserConn
@@ -970,22 +1436,38 @@ func (s *Supervisor) executeBrowserDOMCycle(ctx context.Context, sr *siteRunner,
 		return CycleResult{Conversations: 1}, nil
 	}
 
-	if snap.Controls.CanSend && cc.ChatSession != nil && len(snap.Messages) > 0 {
+	if snap.Controls.CanSend && len(snap.Messages) > 0 {
 		lastMsg := snap.Messages[len(snap.Messages)-1]
 		if lastMsg.Author != "self" && strings.TrimSpace(lastMsg.Text) != "" {
-			turn := cc.ChatSession.Reply(ctx, lastMsg.Text)
+			convID := strings.TrimSpace(snap.Controls.Conversation)
+			if convID == "" {
+				convID = "dom_conv_" + cc.SiteID
+			}
+			partner := strings.TrimSpace(snap.Controls.Partner)
+			if partner == "" {
+				partner = strings.TrimSpace(lastMsg.Author)
+			}
+			if partner == "" {
+				partner = "dom_partner_" + cc.SiteID
+			}
+
+			turnRes, turnErr := s.executeBotEngineTurn(ctx, sr, cc, convID, partner, partner, lastMsg.Text, TransportDOM)
+			if turnErr != nil {
+				return CycleResult{}, turnErr
+			}
 			sent := 0
 			lastText := ""
-			for _, line := range turn.Lines {
-				if okSend, sendErr := domBackend.SendDOMMessage(ctx, line); sendErr == nil && okSend {
+			// Also read the lines from chat history or turnRes.LastMessageSent and send via domchat.go.
+			if turnRes.LastMessageSent != "" {
+				if okSend, sendErr := domBackend.SendDOMMessage(ctx, turnRes.LastMessageSent); sendErr == nil && okSend {
 					sent++
-					lastText = line
+					lastText = turnRes.LastMessageSent
 				}
 			}
 			return CycleResult{
 				MessagesSent:     sent,
 				MessagesReceived: 1,
-				LastReplyRule:    turn.Reason,
+				LastReplyRule:    turnRes.LastReplyRule,
 				LastMessageSent:  lastText,
 			}, nil
 		}
@@ -1043,8 +1525,8 @@ func (s *Supervisor) handleCycleError(sr *siteRunner, err error) {
 }
 
 // prepareSiteExecution resolves the site's isolated session, effective global+override
-// settings, and initializes the internal/bot chat session (Sequence, Folder, EVAChat, or API Chat)
-// rooted strictly inside sites/<site_id>/.
+// settings, and initializes the internal/bot Config & engines (Sequence, Folder,
+// EVAChat, or API Chat) rooted strictly inside sites/<site_id>/.
 func (s *Supervisor) prepareSiteExecution(
 	siteCtx sites.SiteContext,
 	siteCfg sites.Config,
@@ -1071,24 +1553,35 @@ func (s *Supervisor) prepareSiteExecution(
 		if sites.NormalizeAccountMode(siteCfg.AccountMode, siteCfg.ID, siteCfg.AuthMode) == sites.AccountModeAutoRegister {
 			_, _ = sites.AutoRegisterSiteAccounts(context.Background(), s.dataDir, siteCtx.SiteID, profile, 1, false)
 			login, sessionPath, _ = sites.LoadSiteSession(s.dataDir, siteCtx.SiteID, profile)
-		} else {
-			// Create an isolated placeholder session inside sites/<site_id>/sessions/ so
-			// the runner never looks outside sites/<site_id>/.
-			placeholder := model.LoginInfo{
-				UserID:  siteCtx.SiteID + "_" + profile,
-				Profile: profile,
-				Backend: s.defaultBackend,
-			}
-			sessionPath, _ = sites.SaveSiteSession(s.dataDir, siteCtx.SiteID, profile, placeholder)
-			login = placeholder
 		}
+	}
+	if strings.TrimSpace(login.CurrentUserID()) == "" {
+		login = model.LoginInfo{
+			UserID:  siteCtx.SiteID + "_" + profile,
+			Profile: profile,
+			Backend: s.defaultBackend,
+			Cookies: []model.Cookie{
+				{Name: "token", Value: fmt.Sprintf("session_%s_%s", siteCtx.SiteID, profile), Path: "/"},
+			},
+		}
+	}
+	if strings.TrimSpace(sessionPath) == "" {
+		sessionPath, _ = sites.SaveSiteSession(s.dataDir, siteCtx.SiteID, profile, login)
+	}
+
+	// Also sync login_info.json into sites/<site_id>/profiles/<profile>/login_info.json
+	// so internal/bot's profilePaths(cfg) finds it inside the isolated site folder.
+	if profileDir, err := siteCtx.Resolve(filepath.Join("profiles", profile)); err == nil {
+		_ = store.EnsureDir(profileDir)
+		_ = store.SaveJSON(filepath.Join(profileDir, "login_info.json"), login)
 	}
 
 	msgSettings := eff.ApplyMessageSettings(model.DefaultMessageSettings())
 	genSettings := eff.ApplyGeneralSettings(model.DefaultGeneralSettings())
 	proxySettings := eff.ApplyProxySettings(model.DefaultProxySettings())
 
-	botCfg := bot.DefaultConfig(siteCtx.FolderPath, profile, s.defaultBackend, true)
+	botCfg := bot.DefaultConfig(siteCtx.FolderPath, profile, s.defaultBackend, true).
+		WithSiteContext(siteCtx.SiteID, siteCtx.FolderPath)
 	if strings.TrimSpace(siteCfg.AppURL) != "" {
 		botCfg.AppURL = siteCfg.AppURL
 	}
@@ -1098,11 +1591,35 @@ func (s *Supervisor) prepareSiteExecution(
 	botCfg.LoginInfoPath = sessionPath
 	botCfg.ChatMode = msgSettings.EffectiveChatMode()
 	botCfg.MessageSequence = msgSettings.SequenceLines()
-	botCfg.AvailableSequences = [][]string{msgSettings.SequenceLines()}
+	if botCfg.ChatMode == model.ChatModeFolder && len(msgSettings.LoadedSequences) > 0 {
+		botCfg.AvailableSequences = make([][]string, 0, len(msgSettings.LoadedSequences))
+		for _, rawSeq := range msgSettings.LoadedSequences {
+			if lines := model.MessageSequenceLines(rawSeq); len(lines) > 0 {
+				botCfg.AvailableSequences = append(botCfg.AvailableSequences, lines)
+			}
+		}
+	}
+	if len(botCfg.AvailableSequences) == 0 {
+		botCfg.AvailableSequences = [][]string{msgSettings.SequenceLines()}
+	}
 	botCfg.MessageUsernames = msgSettings.UsernameLines()
 	botCfg.FirstMessage = genSettings.FirstMessage.Effective()
 	botCfg.ReplyDelayMin = time.Duration(genSettings.ReplyDelayMinSeconds) * time.Second
 	botCfg.ReplyDelayMax = time.Duration(genSettings.ReplyDelayMaxSeconds) * time.Second
+
+	// Route bot.Config Logf and Activityf strictly into sites/<site_id>/logs/.
+	botCfg.Logf = func(format string, args ...any) {
+		msg := strings.TrimSpace(fmt.Sprintf(format, args...))
+		if msg != "" {
+			appendSiteRunnerLog(siteCtx, "bot_log", map[string]any{"message": msg})
+		}
+	}
+	botCfg.Activityf = func(format string, args ...any) {
+		msg := strings.TrimSpace(fmt.Sprintf(format, args...))
+		if msg != "" {
+			appendSiteRunnerLog(siteCtx, "bot_activity", map[string]any{"activity": msg})
+		}
+	}
 
 	if proxySettings.Enabled && strings.TrimSpace(proxySettings.Entries) != "" {
 		if entries, err := proxy.ParseList(proxySettings.Entries); err == nil && len(entries) > 0 {
@@ -1110,11 +1627,23 @@ func (s *Supervisor) prepareSiteExecution(
 		}
 	}
 
-	// Build the internal/bot chat session (Sequence, Folder Sequences, EVAChat, or API Chat)
-	// rooted inside this site's isolated FolderPath (sites/<site_id>/).
+	// Initialize EVA mode (eva_chat.go) or API mode (api_chat.go) inside sites/<site_id>/data/.
+	switch botCfg.ChatMode {
+	case model.ChatModeEVAChat:
+		if dataRoot, evaErr := bot.EnsureEVAChatData(siteCtx.FolderPath); evaErr == nil {
+			if engine, loadErr := bot.LoadEVAChatEngine(dataRoot); loadErr == nil {
+				botCfg.EVAChat = &bot.EVAChatConfig{DataRoot: dataRoot, Engine: engine}
+			}
+		}
+	case model.ChatModeAPI:
+		if apiCfg, apiErr := bot.LoadAPIChatConfig(siteCtx.FolderPath, msgSettings); apiErr == nil {
+			botCfg.APIChat = apiCfg
+		}
+	}
+
+	// Build the internal/bot chat session rooted inside sites/<site_id>/.
 	chatSession, err := bot.NewLocalChatSession(siteCtx.FolderPath, msgSettings, botCfg.ChatMode)
 	if err != nil {
-		// Fall back to single sequence mode if Folder/API mode lacks external assets in a fresh test dir.
 		fallbackMsg := model.DefaultMessageSettings()
 		chatSession, err = bot.NewLocalChatSession(siteCtx.FolderPath, fallbackMsg, model.ChatModeSingle)
 		if err != nil {
@@ -1204,4 +1733,13 @@ func ReadSiteErrorLogs(dataDir, siteID string) ([]map[string]any, error) {
 		}
 	}
 	return out, nil
+}
+
+// ReadSiteChatHistory reads all ChatHistoryEntry records from sites/<site_id>/logs/chat_history.jsonl.
+func ReadSiteChatHistory(dataDir, siteID string) ([]bot.ChatHistoryEntry, error) {
+	siteCtx, err := sites.NewSiteContext(dataDir, siteID)
+	if err != nil {
+		return nil, err
+	}
+	return bot.ReadSiteChatHistory(siteCtx.FolderPath)
 }

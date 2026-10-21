@@ -106,38 +106,6 @@ export function RunSiteRecipe(arg1, arg2) {
   return window['go']['main']['App']['RunSiteRecipe'](arg1, arg2);
 }
 
-export function StartSite(arg1) {
-  return window['go']['main']['App']['StartSite'](arg1);
-}
-
-export function StopSite(arg1) {
-  return window['go']['main']['App']['StopSite'](arg1);
-}
-
-export function StartSelected(arg1) {
-  return window['go']['main']['App']['StartSelected'](arg1);
-}
-
-export function StopAll() {
-  return window['go']['main']['App']['StopAll']();
-}
-
-export function GetStatus(arg1) {
-  return window['go']['main']['App']['GetStatus'](arg1);
-}
-
-export function GetAllStatuses() {
-  return window['go']['main']['App']['GetAllStatuses']();
-}
-
-export function PauseSite(arg1, arg2) {
-  return window['go']['main']['App']['PauseSite'](arg1, arg2);
-}
-
-export function RestartSite(arg1) {
-  return window['go']['main']['App']['RestartSite'](arg1);
-}
-
 export function LoadMessageFolder() {
   return window['go']['main']['App']['LoadMessageFolder']();
 }
@@ -234,8 +202,60 @@ export function StartLocalTestChat(arg1, arg2) {
   return window['go']['main']['App']['StartLocalTestChat'](arg1, arg2);
 }
 
+export function StartSite(arg1) {
+  return window['go']['main']['App']['StartSite'](arg1);
+}
+
+export function StartSelected(arg1) {
+  return window['go']['main']['App']['StartSelected'](arg1);
+}
+
+export function StartSites(arg1) {
+  return window['go']['main']['App']['StartSites'](arg1);
+}
+
+export function StartAll() {
+  return window['go']['main']['App']['StartAll']();
+}
+
 export function StopBot() {
   return window['go']['main']['App']['StopBot']();
+}
+
+export function StopSite(arg1) {
+  return window['go']['main']['App']['StopSite'](arg1);
+}
+
+export function StopSites(arg1) {
+  return window['go']['main']['App']['StopSites'](arg1);
+}
+
+export function StopAll() {
+  return window['go']['main']['App']['StopAll']();
+}
+
+export function GetStatus(arg1) {
+  return window['go']['main']['App']['GetStatus'](arg1);
+}
+
+export function GetAllStatuses() {
+  return window['go']['main']['App']['GetAllStatuses']();
+}
+
+export function GetSiteStatuses() {
+  return window['go']['main']['App']['GetSiteStatuses']();
+}
+
+export function GetSiteChatHistory(arg1) {
+  return window['go']['main']['App']['GetSiteChatHistory'](arg1);
+}
+
+export function PauseSite(arg1, arg2) {
+  return window['go']['main']['App']['PauseSite'](arg1, arg2);
+}
+
+export function RestartSite(arg1) {
+  return window['go']['main']['App']['RestartSite'](arg1);
 }
 
 export function TestAPIChat(arg1) {

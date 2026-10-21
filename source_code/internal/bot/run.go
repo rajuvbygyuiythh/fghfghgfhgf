@@ -20,6 +20,9 @@ type Config struct {
 	firstIncomingID      string
 	FirstMessage         model.FirstMessageSettings
 	firstIncoming        *model.Message
+	SiteID               string
+	SiteFolder           string
+	WebSocketURL         string
 	AppURL               string
 	APIBaseURL           string
 	DataDir              string
@@ -59,6 +62,29 @@ type Config struct {
 	Logf                 LogFunc
 	Activityf            LogFunc
 }
+
+// EffectiveDataDir returns the isolated site folder when SiteFolder is set,
+// falling back to DataDir for legacy single-site callers.
+func (c Config) EffectiveDataDir() string {
+	if folder := strings.TrimSpace(c.SiteFolder); folder != "" {
+		return folder
+	}
+	return strings.TrimSpace(c.DataDir)
+}
+
+// WithSiteContext binds the bot Config to a specific site's isolated folder
+// (sites/<site_id>/) so all session loads, bot_state.json, logs, and chat assets
+// stay strictly inside that site's folder.
+func (c Config) WithSiteContext(siteID, siteFolder string) Config {
+	c.SiteID = strings.TrimSpace(siteID)
+	c.SiteFolder = strings.TrimSpace(siteFolder)
+	if c.SiteFolder != "" {
+		c.DataDir = c.SiteFolder
+	}
+	return c
+}
+
+type Paths = paths
 
 type paths struct {
 	ProfileDir      string
@@ -405,8 +431,36 @@ func waitForLogin(ctx context.Context, backend browser.Backend, cfg Config, p pa
 	}
 }
 
+// ProfilePaths resolves the isolated profile and state file paths for cfg.
+func ProfilePaths(cfg Config) Paths {
+	return profilePaths(cfg)
+}
+
+// RunAPICycle executes one HTTP/API bot cycle (relationships + DM conversations +
+// auto-responses) inside the site's isolated folder.
+func RunAPICycle(
+	ctx context.Context,
+	cfg Config,
+	login model.LoginInfo,
+	currentUserID string,
+	rng *rand.Rand,
+) (bool, error) {
+	p := profilePaths(cfg)
+	if err := store.EnsureDir(p.ProfileDir); err != nil {
+		return false, err
+	}
+	if rng == nil {
+		rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	}
+	if strings.TrimSpace(currentUserID) == "" {
+		currentUserID = currentUserIDFromLogin(login)
+	}
+	client := api.New(login, cfg.AppURL, cfg.ProxyRotator)
+	return runCycle(ctx, client, cfg, p, login, currentUserID, rng)
+}
+
 func profilePaths(cfg Config) paths {
-	profileDir := filepath.Join(cfg.DataDir, "profiles", safeName(cfg.Profile))
+	profileDir := filepath.Join(cfg.EffectiveDataDir(), "profiles", safeName(cfg.Profile))
 	loginInfoPath := filepath.Join(profileDir, "login_info.json")
 	if strings.TrimSpace(cfg.LoginInfoPath) != "" {
 		loginInfoPath = cfg.LoginInfoPath

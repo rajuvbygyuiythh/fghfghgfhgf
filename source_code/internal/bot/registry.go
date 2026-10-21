@@ -61,9 +61,9 @@ func registerBotUser(cfg Config, currentUserID string) error {
 		return nil
 	}
 
-	return updateSharedRegistry(cfg.DataDir, func(registry *sharedRegistry) error {
+	return updateSharedRegistry(cfg.EffectiveDataDir(), func(registry *sharedRegistry) error {
 		now := time.Now().UTC()
-		addKnownBotUsersFromProfiles(cfg.DataDir, registry, now)
+		addKnownBotUsersFromProfiles(cfg.EffectiveDataDir(), registry, now)
 
 		record := registry.BotUsers[currentUserID]
 		registry.BotUsers[currentUserID] = botUserRecord{
@@ -88,9 +88,9 @@ func recordBotSendStatus(cfg Config, currentUserID string, status int) (bool, er
 	}
 
 	markedDead := false
-	err := updateSharedRegistry(cfg.DataDir, func(registry *sharedRegistry) error {
+	err := updateSharedRegistry(cfg.EffectiveDataDir(), func(registry *sharedRegistry) error {
 		now := time.Now().UTC()
-		addKnownBotUsersFromProfiles(cfg.DataDir, registry, now)
+		addKnownBotUsersFromProfiles(cfg.EffectiveDataDir(), registry, now)
 
 		record := registry.BotUsers[currentUserID]
 		record.Profile = cfg.Profile
@@ -148,9 +148,9 @@ func claimAllPendingUsers(cfg Config, currentUserID string, userIDs []string) ([
 	}
 
 	claimed := make([]string, 0, len(userIDs))
-	err := updateSharedRegistry(cfg.DataDir, func(registry *sharedRegistry) error {
+	err := updateSharedRegistry(cfg.EffectiveDataDir(), func(registry *sharedRegistry) error {
 		now := time.Now().UTC()
-		addKnownBotUsersFromProfiles(cfg.DataDir, registry, now)
+		addKnownBotUsersFromProfiles(cfg.EffectiveDataDir(), registry, now)
 
 		for _, userID := range userIDs {
 			result := claimTrafficUser(registry, cfg, currentUserID, userID, now)
@@ -189,9 +189,9 @@ func claimablePendingUsers(cfg Config, currentUserID string, userIDs []string, c
 	selected := ""
 	claimable := make([]string, 0, len(userIDs))
 
-	err := updateSharedRegistry(cfg.DataDir, func(registry *sharedRegistry) error {
+	err := updateSharedRegistry(cfg.EffectiveDataDir(), func(registry *sharedRegistry) error {
 		now := time.Now().UTC()
-		addKnownBotUsersFromProfiles(cfg.DataDir, registry, now)
+		addKnownBotUsersFromProfiles(cfg.EffectiveDataDir(), registry, now)
 
 		for _, userID := range userIDs {
 			userID = strings.TrimSpace(userID)
@@ -236,9 +236,9 @@ func claimDMTargets(cfg Config, currentUserID string, targets []model.DMTarget) 
 
 	claimedTargets := make([]model.DMTarget, 0, len(targets))
 
-	err := updateSharedRegistry(cfg.DataDir, func(registry *sharedRegistry) error {
+	err := updateSharedRegistry(cfg.EffectiveDataDir(), func(registry *sharedRegistry) error {
 		now := time.Now().UTC()
-		addKnownBotUsersFromProfiles(cfg.DataDir, registry, now)
+		addKnownBotUsersFromProfiles(cfg.EffectiveDataDir(), registry, now)
 
 		for _, target := range targets {
 			result := claimTrafficUser(registry, cfg, currentUserID, target.UserID, now)
