@@ -25,8 +25,10 @@ import (
 )
 
 const (
-	// GlobalDirName is the only directory shared by all sites.
+	// GlobalDirName is the only directory shared by all sites for runtime settings/state.
 	GlobalDirName = "_global"
+	// RecipesDirName holds the repeatable Group A-E setup recipes (sites/_recipes/).
+	RecipesDirName = "_recipes"
 	// SitesDirName is the canonical sites folder name.
 	SitesDirName = "sites"
 	// SettingsFileName is the shared settings file inside GlobalDirName.
@@ -52,6 +54,17 @@ func SitesRoot(dataDir string) string {
 // point at it for site runtime state.
 func GlobalDir(dataDir string) string {
 	return filepath.Join(SitesRoot(dataDir), GlobalDirName)
+}
+
+// RecipesDir returns the directory for repeatable Group A-E setup recipes:
+// <sites-root>/_recipes.
+func RecipesDir(dataDir string) string {
+	return filepath.Join(SitesRoot(dataDir), RecipesDirName)
+}
+
+// RecipePath joins fixed, trusted names under <sites-root>/_recipes.
+func RecipePath(dataDir string, elem ...string) string {
+	return filepath.Join(append([]string{RecipesDir(dataDir)}, elem...)...)
 }
 
 // GlobalPath joins fixed, trusted names under the shared directory. It must only
@@ -208,7 +221,7 @@ func isSitesRoot(dir string) bool {
 		return false
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() || entry.Name() == GlobalDirName {
+		if !entry.IsDir() || entry.Name() == GlobalDirName || entry.Name() == RecipesDirName || strings.HasPrefix(entry.Name(), "_") {
 			continue
 		}
 		if _, err := os.Stat(filepath.Join(dir, entry.Name(), "site.json")); err == nil {

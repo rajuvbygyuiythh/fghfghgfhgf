@@ -1,0 +1,136 @@
+{
+  "group": "C",
+  "group_name": "Browser-Once",
+  "file_name": "group_C.json",
+  "description": "Browser-Once setup recipe: folder create -> login URL detect -> mark \"needs browser\" -> wait user login -> capture session -> verify browserless",
+  "fallback_group": "D",
+  "fallback_chain": [
+    "D",
+    "E"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "id": "folder_create",
+      "name": "folder create",
+      "action": "folder_create",
+      "description": "Create and verify isolated site folder structure (sites/<site_id>/)",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 2,
+      "id": "login_url_detect",
+      "name": "login URL detect",
+      "action": "login_url_detect",
+      "description": "Detect login/CAPTCHA entry URL and verify no unrecoverable manual-only anti-bot block",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 3,
+      "id": "mark_needs_browser",
+      "name": "mark \"needs browser\"",
+      "action": "mark_needs_browser",
+      "description": "Mark site as needing one-time browser login/CAPTCHA solve in sites/<site_id>/",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 4,
+      "id": "wait_user_login",
+      "name": "wait user login",
+      "action": "wait_user_login",
+      "description": "Wait for one-time user browser login or load existing authenticated browser session",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 5,
+      "id": "capture_session",
+      "name": "capture session",
+      "action": "capture_session",
+      "description": "Capture and persist browser cookies, localStorage, and auth tokens inside sites/<site_id>/sessions/",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 6,
+      "id": "verify_browserless",
+      "name": "verify browserless",
+      "action": "verify_browserless",
+      "description": "Verify captured session allows subsequent browserless operation without re-opening the browser",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    }
+  ],
+  "total_runs": 0,
+  "successful_runs": 0,
+  "failed_runs": 0,
+  "success_rate": 0,
+  "success_ratio": 0,
+  "learning": {
+    "total_runs": 0,
+    "successful_runs": 0,
+    "failed_runs": 0,
+    "success_rate": 0,
+    "success_ratio": 0,
+    "step_metrics": {
+      "capture_session": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "folder_create": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "login_url_detect": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "mark_needs_browser": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "verify_browserless": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "wait_user_login": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      }
+    }
+  },
+  "updated_at": "2026-10-22T00:00:00Z"
+}

@@ -164,6 +164,18 @@ Every site is classified into one of five execution groups stored inside `sites/
 - All 102 existing `sites/<site_id>/site.json` files ship with an initial classification (`confidence: "low"`, `source: "initial_guess"`).
 - Classification is re-runnable at any time via `ProbeAndClassifySite(ctx, dataDir, siteID, client)` and `ProbeAndClassifyAllSites(ctx, dataDir, client)` (exposed to Wails via `App.ProbeAndClassifySite` and `App.ProbeAndClassifyAllSites`).
 
+## Phase 4 — Repeatable Site Setup Recipe System (`sites/_recipes/` & `internal/sites/recipes.go`)
+
+- Five canonical setup recipes live under `sites/_recipes/`:
+  - `sites/_recipes/group_A.json` (`Browserless`): `folder create` → `WS detect` → `direct connect test` → `save config`
+  - `sites/_recipes/group_B.json` (`Auto-Signup`): `folder create` → `signup endpoint detect` → `fake account generate` → `POST register` → `token save` → `chat test`
+  - `sites/_recipes/group_C.json` (`Browser-Once`): `folder create` → `login URL detect` → `mark "needs browser"` → `wait user login` → `capture session` → `verify browserless`
+  - `sites/_recipes/group_D.json` (`DOM-Only`): `folder create` → `headless profile setup` → `DOM selector detect` → `save driver` → `headless test`
+  - `sites/_recipes/group_E.json` (`Manual`): `folder create` → `mark manual only`
+- `ExecuteSiteRecipe(ctx, dataDir, siteID, opts)` executes steps sequentially:
+  - Any step failure is logged inside the site's own `sites/<site_id>/logs/recipe.jsonl` and `sites/<site_id>/logs/debug.jsonl`, updates the failed group's statistics, and automatically triggers fallback along `B → C → D → E` (or `A → B → C → D → E`).
+  - Successful setups update the recipe's `success_rate`, `learning.verified_sites`, `learning.learned_endpoints`, `learning.learned_selectors`, and per-step `step_metrics` inside `sites/_recipes/group_<X>.json`.
+
 ## Boundaries of this phase
 
 - The site **catalog** (`sites/<id>/site.json`, `dom_driver.js`, `README.txt`) is

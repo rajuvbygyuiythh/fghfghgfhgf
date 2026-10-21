@@ -50,6 +50,12 @@ export function ListSiteSettings():Promise<Array<any>>;
 
 export function ListSites():Promise<Array<model.SiteOption>>;
 
+export function ListSetupRecipes():Promise<Array<any>>;
+
+export function GetSetupRecipe(arg1:string):Promise<any>;
+
+export function RunSiteRecipe(arg1:string,arg2:string):Promise<any>;
+
 export function LoadMessageFolder():Promise<Array<string>>;
 
 export function OpenAPIChatDataFolder():Promise<string>;

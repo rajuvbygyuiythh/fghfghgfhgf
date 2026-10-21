@@ -178,7 +178,7 @@ func TestSymlinkEscapeIsRejected(t *testing.T) {
 
 func TestInvalidSiteIDsAreRejected(t *testing.T) {
 	dataDir := t.TempDir()
-	for _, id := range []string{"", ".", "..", "../evil", "a/b", `a\b`, GlobalDirName, "Sites", "Chatib"} {
+	for _, id := range []string{"", ".", "..", "../evil", "a/b", `a\b`, GlobalDirName, RecipesDirName, "Sites", "Chatib"} {
 		if _, err := NewSiteContext(dataDir, id); !errors.Is(err, ErrInvalidSiteID) {
 			t.Fatalf("NewSiteContext(%q) err = %v, want ErrInvalidSiteID", id, err)
 		}
@@ -202,6 +202,7 @@ func TestEnsureSitesCreatesOneFolderPerSiteAndOnlyGlobalShares(t *testing.T) {
 	}
 	dirCount := 0
 	sharedCount := 0
+	recipesCount := 0
 	seenFolders := map[string]bool{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -211,6 +212,10 @@ func TestEnsureSitesCreatesOneFolderPerSiteAndOnlyGlobalShares(t *testing.T) {
 			// The one shared folder lives inside the sites root, next to the
 			// site folders, and is never treated as a site.
 			sharedCount++
+			continue
+		}
+		if entry.Name() == RecipesDirName {
+			recipesCount++
 			continue
 		}
 		dirCount++
@@ -237,6 +242,9 @@ func TestEnsureSitesCreatesOneFolderPerSiteAndOnlyGlobalShares(t *testing.T) {
 	}
 	if sharedCount != 1 {
 		t.Fatalf("expected exactly one shared %s folder in the sites root, got %d", GlobalDirName, sharedCount)
+	}
+	if recipesCount != 1 {
+		t.Fatalf("expected exactly one %s folder in the sites root, got %d", RecipesDirName, recipesCount)
 	}
 	for _, shared := range []string{"profiles", "ui", "bot_registry.json"} {
 		if _, err := os.Stat(filepath.Join(dataDir, shared)); !errors.Is(err, os.ErrNotExist) {

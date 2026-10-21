@@ -154,6 +154,9 @@ func EnsureSites(dataDir string) (string, error) {
 	if err := EnsureGlobalDirs(dataDir); err != nil {
 		return "", err
 	}
+	if _, err := EnsureRecipes(dataDir); err != nil {
+		return "", err
+	}
 	if err := ensureSiteFolder(root, DefaultChitChatConfig(), true); err != nil {
 		return "", err
 	}

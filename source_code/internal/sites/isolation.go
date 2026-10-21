@@ -35,6 +35,8 @@ const (
 	// GlobalDirName is the only directory shared by all sites. It holds
 	// application settings, never per-site sessions, profiles or logs.
 	GlobalDirName = "_global"
+	// RecipesDirName holds the repeatable Group A-E setup recipes (sites/_recipes/).
+	RecipesDirName = "_recipes"
 	// SitesDirName is the canonical sites root when no workspace root exists.
 	SitesDirName = "sites"
 )
@@ -466,6 +468,16 @@ func GlobalPath(dataDir, rel string) (string, error) {
 	return SafeJoin(GlobalDir(dataDir), rel)
 }
 
+// RecipesDir returns the directory for repeatable Group A-E setup recipes:
+// <sites-root>/_recipes.
+func RecipesDir(dataDir string) string { return appdirs.RecipesDir(dataDir) }
+
+// RecipesPath resolves a relative path under _recipes/. Untrusted input is
+// validated by SafeJoin.
+func RecipesPath(dataDir, rel string) (string, error) {
+	return SafeJoin(RecipesDir(dataDir), rel)
+}
+
 // EnsureGlobalDirs creates the shared directory tree:
 //
 //	_global/settings.json   (created by the settings store, not here)
@@ -658,7 +670,7 @@ func validateSiteID(siteID string) (string, error) {
 	if raw != SanitizeID(raw) {
 		return "", ErrInvalidSiteID
 	}
-	if raw == GlobalDirName || raw == SitesDirName {
+	if raw == GlobalDirName || raw == RecipesDirName || raw == SitesDirName {
 		return "", ErrInvalidSiteID
 	}
 	return raw, nil

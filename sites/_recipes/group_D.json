@@ -1,0 +1,117 @@
+{
+  "group": "D",
+  "group_name": "DOM-Only",
+  "file_name": "group_D.json",
+  "description": "DOM-Only setup recipe: folder create -> headless profile setup -> DOM selector detect -> save driver -> headless test",
+  "fallback_group": "E",
+  "fallback_chain": [
+    "E"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "id": "folder_create",
+      "name": "folder create",
+      "action": "folder_create",
+      "description": "Create and verify isolated site folder structure (sites/<site_id>/)",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 2,
+      "id": "headless_profile_setup",
+      "name": "headless profile setup",
+      "action": "headless_profile_setup",
+      "description": "Initialize isolated headless browser profile directory under sites/<site_id>/profiles/<profile>/browser",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 3,
+      "id": "dom_selector_detect",
+      "name": "DOM selector detect",
+      "action": "dom_selector_detect",
+      "description": "Detect and validate DOM chat selectors (composer, send, skip, start, message history)",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 4,
+      "id": "save_driver",
+      "name": "save driver",
+      "action": "save_driver",
+      "description": "Generate and persist isolated sites/<site_id>/dom_driver.js and selectors in site.json",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 5,
+      "id": "headless_test",
+      "name": "headless test",
+      "action": "headless_test",
+      "description": "Verify dom_driver.js API surface and headless profile readiness for DOM chat",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    }
+  ],
+  "total_runs": 0,
+  "successful_runs": 0,
+  "failed_runs": 0,
+  "success_rate": 0,
+  "success_ratio": 0,
+  "learning": {
+    "total_runs": 0,
+    "successful_runs": 0,
+    "failed_runs": 0,
+    "success_rate": 0,
+    "success_ratio": 0,
+    "step_metrics": {
+      "dom_selector_detect": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "folder_create": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "headless_profile_setup": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "headless_test": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "save_driver": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      }
+    }
+  },
+  "updated_at": "2026-10-22T00:00:00Z"
+}

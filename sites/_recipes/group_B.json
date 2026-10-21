@@ -1,0 +1,137 @@
+{
+  "group": "B",
+  "group_name": "Auto-Signup",
+  "file_name": "group_B.json",
+  "description": "Auto-Signup setup recipe: folder create -> signup endpoint detect -> fake account generate -> POST register -> token save -> chat test",
+  "fallback_group": "C",
+  "fallback_chain": [
+    "C",
+    "D",
+    "E"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "id": "folder_create",
+      "name": "folder create",
+      "action": "folder_create",
+      "description": "Create and verify isolated site folder structure (sites/<site_id>/)",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 2,
+      "id": "signup_endpoint_detect",
+      "name": "signup endpoint detect",
+      "action": "signup_endpoint_detect",
+      "description": "Detect API/form signup or guest registration endpoint with no CAPTCHA wall",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 3,
+      "id": "fake_account_generate",
+      "name": "fake account generate",
+      "action": "fake_account_generate",
+      "description": "Generate isolated guest/persona credentials (nickname, gender, age, password) for this site",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 4,
+      "id": "post_register",
+      "name": "POST register",
+      "action": "post_register",
+      "description": "Submit registration payload to signup endpoint and obtain session token/cookies",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 5,
+      "id": "token_save",
+      "name": "token save",
+      "action": "token_save",
+      "description": "Save registered token and cookies into sites/<site_id>/accounts/ and sites/<site_id>/sessions/",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 6,
+      "id": "chat_test",
+      "name": "chat test",
+      "action": "chat_test",
+      "description": "Verify saved token/session can authenticate for chat without browser intervention",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    }
+  ],
+  "total_runs": 0,
+  "successful_runs": 0,
+  "failed_runs": 0,
+  "success_rate": 0,
+  "success_ratio": 0,
+  "learning": {
+    "total_runs": 0,
+    "successful_runs": 0,
+    "failed_runs": 0,
+    "success_rate": 0,
+    "success_ratio": 0,
+    "step_metrics": {
+      "chat_test": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "fake_account_generate": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "folder_create": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "post_register": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "signup_endpoint_detect": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "token_save": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      }
+    }
+  },
+  "updated_at": "2026-10-22T00:00:00Z"
+}

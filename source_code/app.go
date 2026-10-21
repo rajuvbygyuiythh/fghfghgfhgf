@@ -338,6 +338,45 @@ func (a *App) ProbeAndClassifyAllSites() ([]sites.Config, error) {
 	return sites.ProbeAndClassifyAllSites(ctx, a.dataDir, nil)
 }
 
+// ListSetupRecipes returns the 5 repeatable setup recipes (Group A–E) from sites/_recipes/.
+func (a *App) ListSetupRecipes() ([]sites.Recipe, error) {
+	return sites.ListRecipes(a.dataDir)
+}
+
+// GetSetupRecipe returns one group recipe (A–E) from sites/_recipes/group_<X>.json.
+func (a *App) GetSetupRecipe(group string) (sites.Recipe, error) {
+	return sites.LoadRecipe(a.dataDir, group)
+}
+
+// RunSiteRecipe executes the repeatable setup recipe for siteID starting at group
+// (or the site's classified group when group is empty), with automatic B->C->D->E
+// fallback and per-site logging in sites/<site_id>/logs/recipe.jsonl.
+func (a *App) RunSiteRecipe(siteID, group string) (sites.RecipeExecutionResult, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	res, err := sites.ExecuteSiteRecipe(ctx, a.dataDir, siteID, sites.RecipeRunOptions{
+		Group: group,
+	})
+	if err != nil {
+		a.log("error", fmt.Sprintf("Recipe setup for %s failed: %v", siteID, err))
+		return res, err
+	}
+	a.log("info", fmt.Sprintf(
+		"Recipe setup for %s succeeded -> Group %s (%s) [fallback=%v, rate=%.2f%%]",
+		res.SiteID,
+		res.FinalGroup,
+		res.FinalGroupName,
+		res.UsedFallback,
+		res.SuccessRate,
+	))
+	return res, nil
+}
+
 func (a *App) ListSites() ([]model.SiteOption, error) {
 	list, err := sites.List(a.dataDir)
 	if err != nil {

@@ -94,6 +94,18 @@ export function ListSites() {
   return window['go']['main']['App']['ListSites']();
 }
 
+export function ListSetupRecipes() {
+  return window['go']['main']['App']['ListSetupRecipes']();
+}
+
+export function GetSetupRecipe(arg1) {
+  return window['go']['main']['App']['GetSetupRecipe'](arg1);
+}
+
+export function RunSiteRecipe(arg1, arg2) {
+  return window['go']['main']['App']['RunSiteRecipe'](arg1, arg2);
+}
+
 export function LoadMessageFolder() {
   return window['go']['main']['App']['LoadMessageFolder']();
 }

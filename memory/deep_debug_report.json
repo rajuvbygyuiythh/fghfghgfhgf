@@ -1,6 +1,6 @@
 {
   "overall_status": "PASS",
-  "checked_at": "2026-10-21T20:26:29.836Z",
+  "checked_at": "2026-10-21T21:08:34.639Z",
   "total_sites": 102,
   "auto_register_sites": 86,
   "browser_setup_sites": 16,
@@ -13,9 +13,9 @@
     },
     {
       "step": 2,
-      "name": "Dual Account Setup & Group A-E Classification",
+      "name": "Dual Account Setup, Group A-E Classification & 5 Setup Recipes",
       "status": "PASS",
-      "detail": "⚡ Auto-Register: 86 | 🌐 Browser Setup: 16 | Groups A=20 B=34 C=12 D=32 E=4"
+      "detail": "⚡ Auto-Register: 86 | 🌐 Browser Setup: 16 | Groups A=20 B=34 C=12 D=32 E=4 | Recipes: 5/5"
     },
     {
       "step": 3,

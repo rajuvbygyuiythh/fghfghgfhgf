@@ -22,7 +22,7 @@ function runDeepDiagnostics() {
   if (fs.existsSync(sitesRoot)) {
     siteDirs = fs
       .readdirSync(sitesRoot, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && d.name !== "_global")
+      .filter((d) => d.isDirectory() && !d.name.startsWith("_"))
       .map((d) => d.name)
       .sort();
   }
@@ -80,21 +80,39 @@ function runDeepDiagnostics() {
     );
   }
 
-  // Step 2: Dual Account Mode & Group A-E Classification Check
+  // Step 2: Dual Account Mode, Group A-E Classification & Recipes Check
   const classifiedTotal = groupCounts.A + groupCounts.B + groupCounts.C + groupCounts.D + groupCounts.E;
-  if (autoRegCount >= 85 && browserSetupCount >= 16 && classifiedTotal >= 102) {
+  const recipesDir = path.join(sitesRoot, "_recipes");
+  const recipeGroups = ["A", "B", "C", "D", "E"];
+  const missingRecipes = [];
+  for (const g of recipeGroups) {
+    const rp = path.join(recipesDir, `group_${g}.json`);
+    if (!fs.existsSync(rp)) {
+      missingRecipes.push(`group_${g}.json`);
+    } else {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(rp, "utf8"));
+        if (!Array.isArray(parsed.steps) || parsed.steps.length === 0) {
+          missingRecipes.push(`group_${g}.json (empty steps)`);
+        }
+      } catch (_) {
+        missingRecipes.push(`group_${g}.json (invalid JSON)`);
+      }
+    }
+  }
+  if (autoRegCount >= 85 && browserSetupCount >= 16 && classifiedTotal >= 102 && missingRecipes.length === 0) {
     addStep(
       2,
-      "Dual Account Setup & Group A-E Classification",
+      "Dual Account Setup, Group A-E Classification & 5 Setup Recipes",
       "PASS",
-      `⚡ Auto-Register: ${autoRegCount} | 🌐 Browser Setup: ${browserSetupCount} | Groups A=${groupCounts.A} B=${groupCounts.B} C=${groupCounts.C} D=${groupCounts.D} E=${groupCounts.E}`,
+      `⚡ Auto-Register: ${autoRegCount} | 🌐 Browser Setup: ${browserSetupCount} | Groups A=${groupCounts.A} B=${groupCounts.B} C=${groupCounts.C} D=${groupCounts.D} E=${groupCounts.E} | Recipes: 5/5`,
     );
   } else {
     addStep(
       2,
-      "Dual Account Setup & Group A-E Classification",
+      "Dual Account Setup, Group A-E Classification & 5 Setup Recipes",
       "FAIL",
-      `Unexpected counts: auto_register=${autoRegCount}, browser_setup=${browserSetupCount}, classified=${classifiedTotal}`,
+      `Unexpected counts: auto_register=${autoRegCount}, browser_setup=${browserSetupCount}, classified=${classifiedTotal}, missing_recipes=${missingRecipes.join(", ")}`,
     );
   }
 

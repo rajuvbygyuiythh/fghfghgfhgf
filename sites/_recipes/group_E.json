@@ -1,0 +1,59 @@
+{
+  "group": "E",
+  "group_name": "Manual",
+  "file_name": "group_E.json",
+  "description": "Manual setup recipe: folder create -> mark manual only",
+  "steps": [
+    {
+      "order": 1,
+      "id": "folder_create",
+      "name": "folder create",
+      "action": "folder_create",
+      "description": "Create and verify isolated site folder structure (sites/<site_id>/)",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 2,
+      "id": "mark_manual_only",
+      "name": "mark manual only",
+      "action": "mark_manual_only",
+      "description": "Mark site as manual-only due to heavy bot detection and persist manual marker in sites/<site_id>/",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    }
+  ],
+  "total_runs": 0,
+  "successful_runs": 0,
+  "failed_runs": 0,
+  "success_rate": 0,
+  "success_ratio": 0,
+  "learning": {
+    "total_runs": 0,
+    "successful_runs": 0,
+    "failed_runs": 0,
+    "success_rate": 0,
+    "success_ratio": 0,
+    "step_metrics": {
+      "folder_create": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "mark_manual_only": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      }
+    }
+  },
+  "updated_at": "2026-10-22T00:00:00Z"
+}

@@ -1,0 +1,102 @@
+{
+  "group": "A",
+  "group_name": "Browserless",
+  "file_name": "group_A.json",
+  "description": "Browserless setup recipe: folder create -> WS detect -> direct connect test -> save config",
+  "fallback_group": "B",
+  "fallback_chain": [
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "id": "folder_create",
+      "name": "folder create",
+      "action": "folder_create",
+      "description": "Create and verify isolated site folder structure (sites/<site_id>/, accounts/, profiles/, sessions/, logs/)",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 2,
+      "id": "ws_detect",
+      "name": "WS detect",
+      "action": "ws_detect",
+      "description": "Detect WebSocket or direct realtime chat endpoint and verify no CAPTCHA or login gate is present",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 3,
+      "id": "direct_connect_test",
+      "name": "direct connect test",
+      "action": "direct_connect_test",
+      "description": "Perform browserless direct connection handshake test against the target endpoint",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    },
+    {
+      "order": 4,
+      "id": "save_config",
+      "name": "save config",
+      "action": "save_config",
+      "description": "Save verified browserless config and ready session inside sites/<site_id>/",
+      "required": true,
+      "runs": 0,
+      "successes": 0,
+      "failures": 0,
+      "success_rate": 0
+    }
+  ],
+  "total_runs": 0,
+  "successful_runs": 0,
+  "failed_runs": 0,
+  "success_rate": 0,
+  "success_ratio": 0,
+  "learning": {
+    "total_runs": 0,
+    "successful_runs": 0,
+    "failed_runs": 0,
+    "success_rate": 0,
+    "success_ratio": 0,
+    "step_metrics": {
+      "direct_connect_test": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "folder_create": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "save_config": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      },
+      "ws_detect": {
+        "runs": 0,
+        "successes": 0,
+        "failures": 0,
+        "success_rate": 0
+      }
+    }
+  },
+  "updated_at": "2026-10-22T00:00:00Z"
+}
