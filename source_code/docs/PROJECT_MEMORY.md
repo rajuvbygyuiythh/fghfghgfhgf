@@ -7,9 +7,9 @@ things stand without re-asking the user. The AUTO block below is refreshed by
 after every meaningful change** (newest last). Never rewrite old entries.
 
 <!-- AUTO:BEGIN -->
-_Auto status 2026-10-21. Do not edit this block by hand._
+_Auto status 2026-10-22. Do not edit this block by hand._
 
-- Source fingerprint: `028987b919e9fb0f…`
+- Source fingerprint: `cfd0d1aa98c0e263…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
 - Last verification: no report found yet (`npm run verify`)

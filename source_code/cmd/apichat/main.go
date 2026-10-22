@@ -21,6 +21,7 @@ import (
 	"chitchatbot/internal/bot"
 	"chitchatbot/internal/model"
 	"chitchatbot/internal/runtimeassets"
+	"chitchatbot/internal/settings"
 	"chitchatbot/internal/sites"
 	"chitchatbot/internal/uistore"
 
@@ -73,12 +74,73 @@ func (a *StudioApp) startup(ctx context.Context) {
 
 func (a *StudioApp) shutdown(_ context.Context) {}
 
-// GetStudioState loads the shared Message settings and data/api_chat TXT files.
-func (a *StudioApp) GetStudioState() (StudioState, error) {
-	settings, err := uistore.LoadSharedMessageSettings(a.dataDir)
-	if err != nil {
-		settings = model.NormalizeAPISettings(model.DefaultMessageSettings())
+func syncGlobalToStudioSettings(dataDir string, msg model.MessageSettings) model.MessageSettings {
+	if strings.TrimSpace(dataDir) == "" {
+		return msg
 	}
+	st, err := settings.Open(dataDir)
+	if err != nil {
+		return msg
+	}
+	global, err := st.Load()
+	if err != nil {
+		return msg
+	}
+	if strings.TrimSpace(global.API.BaseURL) != "" {
+		msg.AIBaseURL = strings.TrimSpace(global.API.BaseURL)
+	}
+	if strings.TrimSpace(global.API.APIKey) != "" {
+		msg.AIAPIKey = strings.TrimSpace(global.API.APIKey)
+		msg.AIEnabled = true
+	}
+	if strings.TrimSpace(global.API.Model) != "" {
+		msg.AIModel = strings.TrimSpace(global.API.Model)
+	}
+	if global.API.Temperature > 0 {
+		msg.APITemperature = global.API.Temperature
+	}
+	return model.NormalizeAPISettings(msg)
+}
+
+func syncStudioSettingsToGlobal(dataDir string, msg model.MessageSettings) {
+	if strings.TrimSpace(dataDir) == "" {
+		return
+	}
+	st, err := settings.Open(dataDir)
+	if err != nil {
+		return
+	}
+	global, err := st.Load()
+	if err != nil {
+		global = settings.Default()
+	}
+	if mode := settings.NormalizeMessageMode(msg.EffectiveChatMode()); mode != "" {
+		global.MessageMode = mode
+	}
+	if key := strings.TrimSpace(msg.AIAPIKey); key != "" {
+		global.API.APIKey = key
+	}
+	if base := strings.TrimSpace(msg.AIBaseURL); base != "" {
+		global.API.BaseURL = base
+	}
+	if modelName := strings.TrimSpace(msg.AIModel); modelName != "" {
+		global.API.Model = modelName
+	}
+	if msg.APITemperature > 0 {
+		global.API.Temperature = msg.APITemperature
+	}
+	global.API.Enabled = msg.AIEnabled || strings.TrimSpace(global.API.APIKey) != ""
+	_, _ = st.Save(global)
+}
+
+// GetStudioState loads the shared Message settings (synced with sites/_global/settings.json)
+// and data/api_chat TXT files.
+func (a *StudioApp) GetStudioState() (StudioState, error) {
+	msgSettings, err := uistore.LoadSharedMessageSettings(a.dataDir)
+	if err != nil {
+		msgSettings = model.NormalizeAPISettings(model.DefaultMessageSettings())
+	}
+	msgSettings = syncGlobalToStudioSettings(a.dataDir, msgSettings)
 	deck, err := bot.LoadAPIChatDeck(a.dataDir)
 	if err != nil {
 		return StudioState{}, err
@@ -91,14 +153,14 @@ func (a *StudioApp) GetStudioState() (StudioState, error) {
 	a.mu.Unlock()
 	return StudioState{
 		DataDir:  a.dataDir,
-		Settings: settings,
+		Settings: msgSettings,
 		Deck:     deck,
 		Chat:     chatInfo,
 	}, nil
 }
 
 // SaveStudioState persists the persona/share/fallback/countries TXT files and
-// syncs the API settings with the main dashboard.
+// syncs the API settings with both the main dashboard and sites/_global/settings.json (Prompt 15).
 func (a *StudioApp) SaveStudioState(req StudioSaveRequest) (StudioState, error) {
 	deck, err := bot.SaveAPIChatDeck(a.dataDir, req.Deck)
 	if err != nil {
@@ -107,10 +169,11 @@ func (a *StudioApp) SaveStudioState(req StudioSaveRequest) (StudioState, error) 
 	if strings.TrimSpace(req.Settings.ChatMode) == "" {
 		req.Settings.ChatMode = model.ChatModeAPI
 	}
-	settings, err := uistore.SaveSharedMessageSettings(a.dataDir, req.Settings)
+	savedSettings, err := uistore.SaveSharedMessageSettings(a.dataDir, req.Settings)
 	if err != nil {
 		return StudioState{}, err
 	}
+	syncStudioSettingsToGlobal(a.dataDir, savedSettings)
 	var chatInfo bot.LocalChatInfo
 	a.mu.Lock()
 	if a.session != nil {
@@ -119,7 +182,7 @@ func (a *StudioApp) SaveStudioState(req StudioSaveRequest) (StudioState, error) 
 	a.mu.Unlock()
 	return StudioState{
 		DataDir:  a.dataDir,
-		Settings: settings,
+		Settings: savedSettings,
 		Deck:     deck,
 		Chat:     chatInfo,
 	}, nil

@@ -214,3 +214,36 @@ test('local test.bat covers all four dashboard Message options, offline',()=>{
  assert.match(read('cmd/chitchattest/main.go'),/LoadMessageSettings\(\)/);
  assert.match(read('cmd/chitchattest/main.go'),/Close the running dashboard first/);
 });
+
+test('Prompt 15: Settings Sync (sites/_global/settings.json <-> apichat.exe), RPC audit, 102 site folders verification, and MULTISITE_GUIDE.md',()=>{
+ const apichatMain=read('cmd/apichat/main.go');
+ assert.match(apichatMain,/syncGlobalToStudioSettings/);
+ assert.match(apichatMain,/syncStudioSettingsToGlobal/);
+ assert.match(go,/func \(a \*App\) SyncGlobalAndAPIChatSettings\(\)/);
+
+ const exportedRpcs=[...bindings.matchAll(/export function (\w+)\(/g)].map(m=>m[1]);
+ assert.ok(exportedRpcs.length>=80);
+ for(const fn of exportedRpcs){
+  assert.match(goAll,new RegExp(`func \\(a \\*App\\) ${fn}\\(`),`exported RPC ${fn} must exist on *App`);
+ }
+
+ const sitesRoot=path.join(root,'..','sites');
+ const entries=fs.readdirSync(sitesRoot,{withFileTypes:true}).filter(e=>e.isDirectory());
+ const sharedDirs=entries.filter(e=>e.name.startsWith('_')).map(e=>e.name).sort();
+ assert.deepEqual(sharedDirs,['_global','_recipes']);
+ const siteDirs=entries.filter(e=>!e.name.startsWith('_')).map(e=>e.name);
+ assert.equal(siteDirs.length,102);
+ for(const id of siteDirs){
+  const dir=path.join(sitesRoot,id);
+  for(const sub of ['site.json','dom_driver.js',`${id}_protection.txt`,'accounts','sessions','sessions/default','profiles','profiles/default','logs']){
+   assert.ok(fs.existsSync(path.join(dir,sub)),`missing ${id}/${sub}`);
+  }
+  const cfg=JSON.parse(fs.readFileSync(path.join(dir,'site.json'),'utf8'));
+  assert.match(cfg.classification?.group||'',/^[A-E]$/,`invalid classification group for ${id}`);
+ }
+
+ assert.ok(fs.existsSync(path.join(root,'docs/MULTISITE_GUIDE.md')));
+ assert.match(read('docs/MULTISITE_GUIDE.md'),/102 sites = 102 separate folders/);
+ assert.match(read('docs/PROJECT_MAP.md'),/docs\/MULTISITE_GUIDE\.md/);
+});
+

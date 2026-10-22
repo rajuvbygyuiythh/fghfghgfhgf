@@ -162,6 +162,9 @@ export function WizardProbeURL(arg1:string,arg2:string):Promise<any>;
 
 export function WizardCreateAndSetupSite(arg1:string,arg2:string,arg3:string):Promise<any>;
 
+export function SyncGlobalAndAPIChatSettings():Promise<any>;
+
+
 
 
 export function GetStatus(arg1:string):Promise<any>;

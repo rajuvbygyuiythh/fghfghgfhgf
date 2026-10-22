@@ -40,9 +40,9 @@ Every agent working on this project MUST follow this strict 4-step workflow for 
 | **Prompt 11** | Phase 4: Session + Browserless | Browserless Chat | 🔴 Critical | ✅ **DONE** (`da04a85`) | `source_code/internal/runner/browserless.go`, `browserless_test.go`, `supervisor.go`, `internal/bot/{run,realtime,api_chat}.go`, `internal/browser/domchat.go`, `tests/browser-ui.test.cjs` |
 | **Prompt 12** | Phase 5: Self-Recovery + Polish | Agent Self-Recovery (Scenarios A–E) | 🔴 MOST IMPORTANT | ✅ **DONE** (`ac4783e`) | `source_code/internal/runner/recovery.go`, `recovery_test.go`, `supervisor.go`, `app.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
 | **Prompt 13** | Phase 5: Self-Recovery + Polish | Combined Live Log + Error Dashboard | 🟡 Medium | ✅ **DONE** (`2f932af`) | `source_code/app.go`, `show_log.go`, `bot_log.go`, `internal/model/ui.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
-| **Prompt 14** | Phase 5: Self-Recovery + Polish | Bulk Operations + Add Site Wizard | 🟢 Nice-to-have | ✅ **DONE** | `source_code/app.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
-| **Prompt 15** | Phase 6: Final | Settings Sync + Cleanup + Docs | 🟡 Medium | ⏳ **IN PROGRESS (Awaiting Approval)** | `source_code/app.go`, `cmd/apichat/*`, `docs/PROJECT_MAP.md`, `docs/MULTISITE_GUIDE.md` |
-| **Prompt 16** | Phase 6: Final | Full Integration Test + Final EXE Build | 🔴 Critical | ⏳ **PENDING** | `source_code/integration_test.go`, `tests/*.test.cjs`, `verify.bat` |
+| **Prompt 14** | Phase 5: Self-Recovery + Polish | Bulk Operations + Add Site Wizard | 🟢 Nice-to-have | ✅ **DONE** (`0a0aee2`) | `source_code/app.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
+| **Prompt 15** | Phase 6: Final | Settings Sync + Cleanup + Docs | 🟡 Medium | ✅ **DONE** | `source_code/app.go`, `cmd/apichat/main.go`, `docs/PROJECT_MAP.md`, `docs/MULTISITE_GUIDE.md`, `tests/contracts.test.cjs` |
+| **Prompt 16** | Phase 6: Final | Full Integration Test + Final EXE Build | 🔴 Critical | ⏳ **IN PROGRESS (Awaiting Approval)** | `source_code/integration_test.go`, `tests/*.test.cjs`, `verify.bat` |
 
 ---
 

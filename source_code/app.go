@@ -166,11 +166,35 @@ func (a *App) globalSettingsFromUIStore() (settings.Settings, error) {
 
 // loadOrSeedGlobalSettings reads sites/_global/settings.json when present and
 // falls back to the current uistore values before the first global save.
+// It also syncs API settings saved from apichat.exe (shared mirror) into
+// sites/_global/settings.json (Prompt 15).
 func (a *App) loadOrSeedGlobalSettings() (settings.Settings, error) {
 	st := a.settingsStore()
 	if st != nil {
 		if _, err := os.Stat(st.GlobalPath()); err == nil {
-			return st.Load()
+			loaded, loadErr := st.Load()
+			if loadErr == nil && a.dataDir != "" {
+				if sharedMsg, mErr := uistore.LoadMessageSettingsMirror(a.dataDir); mErr == nil {
+					changed := false
+					if strings.TrimSpace(loaded.API.APIKey) == "" && strings.TrimSpace(sharedMsg.AIAPIKey) != "" {
+						loaded.API.APIKey = strings.TrimSpace(sharedMsg.AIAPIKey)
+						loaded.API.Enabled = true
+						changed = true
+					}
+					if strings.TrimSpace(loaded.API.BaseURL) == "" && strings.TrimSpace(sharedMsg.AIBaseURL) != "" {
+						loaded.API.BaseURL = strings.TrimSpace(sharedMsg.AIBaseURL)
+						changed = true
+					}
+					if strings.TrimSpace(loaded.API.Model) == "" && strings.TrimSpace(sharedMsg.AIModel) != "" {
+						loaded.API.Model = strings.TrimSpace(sharedMsg.AIModel)
+						changed = true
+					}
+					if changed {
+						_, _ = st.Save(loaded)
+					}
+				}
+			}
+			return loaded, loadErr
 		}
 	}
 	return a.globalSettingsFromUIStore()
@@ -1251,15 +1275,19 @@ func (a *App) SaveGlobalSettings(next settings.Settings) (GlobalSettingsView, er
 	return a.globalSettingsView(stored), nil
 }
 
-// syncUIStoreFromGlobal keeps the Badger-backed UI store in lockstep when the
-// caller saves through SaveGlobalSettings directly.
+// syncUIStoreFromGlobal keeps the Badger-backed UI store and apichat.exe shared
+// mirror in lockstep when the caller saves through SaveGlobalSettings directly (Prompt 15).
 func (a *App) syncUIStoreFromGlobal(stored settings.Settings) {
 	if a.uiStore == nil {
 		return
 	}
 	effective := settings.Merge(stored, settings.Override{})
 	if msg, err := a.uiStore.LoadMessageSettings(); err == nil {
-		_ = a.uiStore.SaveMessageSettings(effective.ApplyMessageSettings(msg))
+		applied := effective.ApplyMessageSettings(msg)
+		_ = a.uiStore.SaveMessageSettings(applied)
+		if a.dataDir != "" {
+			_, _ = uistore.SaveSharedMessageSettings(a.dataDir, applied)
+		}
 	}
 	_ = a.uiStore.SaveProxySettings(stored.Proxy)
 	if gen, err := a.uiStore.LoadGeneralSettings(); err == nil {
@@ -1277,6 +1305,42 @@ func (a *App) syncUIStoreFromGlobal(stored settings.Settings) {
 		}
 		_ = a.uiStore.SaveShowModeSettings(show)
 	}
+}
+
+// SyncGlobalAndAPIChatSettings performs bidirectional synchronization between
+// sites/_global/settings.json and apichat.exe's shared message settings mirror (Prompt 15).
+func (a *App) SyncGlobalAndAPIChatSettings() (GlobalSettingsView, error) {
+	stored, err := a.loadOrSeedGlobalSettings()
+	if err != nil {
+		return GlobalSettingsView{}, err
+	}
+	if a.dataDir != "" {
+		if sharedMsg, mErr := uistore.LoadSharedMessageSettings(a.dataDir); mErr == nil {
+			if mode := settings.NormalizeMessageMode(sharedMsg.EffectiveChatMode()); mode != "" {
+				stored.MessageMode = mode
+			}
+			if key := strings.TrimSpace(sharedMsg.AIAPIKey); key != "" {
+				stored.API.APIKey = key
+				stored.API.Enabled = true
+			}
+			if base := strings.TrimSpace(sharedMsg.AIBaseURL); base != "" {
+				stored.API.BaseURL = base
+			}
+			if mdl := strings.TrimSpace(sharedMsg.AIModel); mdl != "" {
+				stored.API.Model = mdl
+			}
+			if sharedMsg.APITemperature > 0 {
+				stored.API.Temperature = sharedMsg.APITemperature
+			}
+		}
+	}
+	if st := a.settingsStore(); st != nil {
+		if saved, sErr := st.Save(stored); sErr == nil {
+			stored = saved
+		}
+	}
+	a.syncUIStoreFromGlobal(stored)
+	return a.globalSettingsView(stored), nil
 }
 
 // GetSiteSettings returns the effective settings for one site and the source of

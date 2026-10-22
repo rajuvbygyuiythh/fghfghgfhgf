@@ -350,4 +350,9 @@ export function WizardCreateAndSetupSite(arg1, arg2, arg3) {
   return window['go']['main']['App']['WizardCreateAndSetupSite'](arg1, arg2, arg3);
 }
 
+export function SyncGlobalAndAPIChatSettings() {
+  return window['go']['main']['App']['SyncGlobalAndAPIChatSettings']();
+}
+
+
 
