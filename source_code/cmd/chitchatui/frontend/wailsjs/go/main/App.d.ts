@@ -56,6 +56,12 @@ export function GetSessionStatuses():Promise<any>;
 
 export function CaptureMissingSessionsBatch(arg1:number):Promise<any>;
 
+export function RecoverSite(arg1:string,arg2:string):Promise<any>;
+
+export function GetRecoveryStatuses():Promise<any>;
+
+export function ResetSiteRecovery(arg1:string):Promise<any>;
+
 export function GetLocalTestChatState():Promise<any>;
 
 export function ListProfiles():Promise<Array<main.ProfileOption>>;

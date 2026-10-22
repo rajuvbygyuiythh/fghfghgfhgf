@@ -1326,11 +1326,16 @@ type SiteDetailView struct {
 	UptimeText        string             `json:"uptime_text"`
 	ErrorCount        int                `json:"error_count"`
 	ConsecutiveErrors int                `json:"consecutive_errors"`
-	LastError         string             `json:"last_error,omitempty"`
-	LastErrorType     string             `json:"last_error_type,omitempty"`
-	HasOverride       bool               `json:"has_override"`
-	Override          settings.Override  `json:"override"`
-	Effective         settings.Effective `json:"effective"`
+	LastError            string             `json:"last_error,omitempty"`
+	LastErrorType        string             `json:"last_error_type,omitempty"`
+	RecoveryStatus       string             `json:"recovery_status,omitempty"`
+	RecoveryAttempts     int                `json:"recovery_attempts,omitempty"`
+	NeedsHuman           bool               `json:"needs_human,omitempty"`
+	LastRecoveryScenario string             `json:"last_recovery_scenario,omitempty"`
+	LastRecoveryMessage  string             `json:"last_recovery_message,omitempty"`
+	HasOverride          bool               `json:"has_override"`
+	Override             settings.Override  `json:"override"`
+	Effective            settings.Effective `json:"effective"`
 }
 
 func formatUptime(seconds int) string {
@@ -1430,12 +1435,47 @@ func (a *App) GetSiteDetail(siteID string) (SiteDetailView, error) {
 		UptimeText:        formatUptime(uptimeSec),
 		ErrorCount:        st.TotalErrors,
 		ConsecutiveErrors: st.ConsecutiveErrors,
-		LastError:         st.LastError,
-		LastErrorType:     st.LastErrorType,
-		HasOverride:       !ov.IsEmpty(),
-		Override:          ov,
-		Effective:         eff,
+		LastError:            st.LastError,
+		LastErrorType:        st.LastErrorType,
+		RecoveryStatus:       st.RecoveryStatus,
+		RecoveryAttempts:     st.RecoveryAttempts,
+		NeedsHuman:           st.NeedsHuman,
+		LastRecoveryScenario: st.LastRecoveryScenario,
+		LastRecoveryMessage:  st.LastRecoveryMessage,
+		HasOverride:          !ov.IsEmpty(),
+		Override:             ov,
+		Effective:            eff,
 	}, nil
+}
+
+// RecoverSite triggers Agent Self-Recovery (Scenarios A–E, max 3 attempts) for
+// siteID and emits UI recovery notifications (Prompt 12).
+func (a *App) RecoverSite(siteID string, errorType string) (runner.RecoveryReport, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	rep, err := a.runnerSupervisor().RecoverSite(siteID, errorType)
+	a.emit("ui:recovery", rep)
+	a.emit("ui:site_statuses", a.GetSiteStatuses())
+	if err != nil {
+		return rep, err
+	}
+	return rep, nil
+}
+
+// GetRecoveryStatuses returns all per-site self-recovery reports (Prompt 12).
+func (a *App) GetRecoveryStatuses() map[string]runner.RecoveryReport {
+	return a.runnerSupervisor().GetRecoveryStatuses()
+}
+
+// ResetSiteRecovery resets the self-recovery attempt counter for siteID (Prompt 12).
+func (a *App) ResetSiteRecovery(siteID string) (SiteDetailView, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	a.runnerSupervisor().ResetSiteRecovery(siteID)
+	a.emit("ui:site_statuses", a.GetSiteStatuses())
+	return a.GetSiteDetail(siteID)
 }
 
 // CaptureSession opens or captures a session for siteID using its isolated

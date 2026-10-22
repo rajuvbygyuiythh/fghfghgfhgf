@@ -106,6 +106,18 @@ export function CaptureMissingSessionsBatch(arg1) {
   return window['go']['main']['App']['CaptureMissingSessionsBatch'](arg1);
 }
 
+export function RecoverSite(arg1, arg2) {
+  return window['go']['main']['App']['RecoverSite'](arg1, arg2);
+}
+
+export function GetRecoveryStatuses() {
+  return window['go']['main']['App']['GetRecoveryStatuses']();
+}
+
+export function ResetSiteRecovery(arg1) {
+  return window['go']['main']['App']['ResetSiteRecovery'](arg1);
+}
+
 export function GetLocalTestChatState() {
   return window['go']['main']['App']['GetLocalTestChatState']();
 }

@@ -247,10 +247,15 @@ type SiteStatus struct {
 	LastError         string         `json:"last_error,omitempty"`
 	LastErrorType     string         `json:"last_error_type,omitempty"`
 	LastErrorAt       string         `json:"last_error_at,omitempty"`
-	StartedAt         string         `json:"started_at,omitempty"`
-	StoppedAt         string         `json:"stopped_at,omitempty"`
-	RestartCount      int            `json:"restart_count"`
-	Stats             SiteStats      `json:"stats"`
+	StartedAt            string         `json:"started_at,omitempty"`
+	StoppedAt            string         `json:"stopped_at,omitempty"`
+	RestartCount         int            `json:"restart_count"`
+	RecoveryStatus       string         `json:"recovery_status,omitempty"`
+	RecoveryAttempts     int            `json:"recovery_attempts,omitempty"`
+	NeedsHuman           bool           `json:"needs_human,omitempty"`
+	LastRecoveryScenario string         `json:"last_recovery_scenario,omitempty"`
+	LastRecoveryMessage  string         `json:"last_recovery_message,omitempty"`
+	Stats                SiteStats      `json:"stats"`
 }
 
 // CycleContext is passed to CycleFunc on each iteration of a site's runner goroutine.
@@ -352,6 +357,7 @@ type Supervisor struct {
 	browserFactory       BrowserFactory
 	cycleFunc            CycleFunc
 	notifyFunc           func(Notification)
+	recoveryMgr          *RecoveryManager
 	runners              map[string]*siteRunner
 }
 
@@ -381,7 +387,7 @@ func NewSupervisor(opts Options) *Supervisor {
 	if st == nil && strings.TrimSpace(opts.DataDir) != "" {
 		st, _ = settings.Open(opts.DataDir)
 	}
-	return &Supervisor{
+	sup := &Supervisor{
 		dataDir:              filepath.Clean(strings.TrimSpace(opts.DataDir)),
 		settingsStore:        st,
 		maxConsecutiveErrors: maxErr,
@@ -394,6 +400,36 @@ func NewSupervisor(opts Options) *Supervisor {
 		notifyFunc:           opts.NotifyFunc,
 		runners:              make(map[string]*siteRunner),
 	}
+	sup.recoveryMgr = NewRecoveryManager(sup)
+	return sup
+}
+
+// RecoveryManager returns the Supervisor's RecoveryManager (Prompt 12).
+func (s *Supervisor) RecoveryManager() *RecoveryManager {
+	return s.recoveryMgr
+}
+
+// RecoverSite triggers self-recovery (Scenarios A–E, max 3 attempts) for siteID (Prompt 12).
+func (s *Supervisor) RecoverSite(siteID, errorType string) (RecoveryReport, error) {
+	if s.recoveryMgr == nil {
+		s.recoveryMgr = NewRecoveryManager(s)
+	}
+	return s.recoveryMgr.RecoverSite(siteID, errorType)
+}
+
+// ResetSiteRecovery resets the recovery counter and status for siteID (Prompt 12).
+func (s *Supervisor) ResetSiteRecovery(siteID string) {
+	if s.recoveryMgr != nil {
+		s.recoveryMgr.ResetSite(siteID)
+	}
+}
+
+// GetRecoveryStatuses returns all per-site recovery reports (Prompt 12).
+func (s *Supervisor) GetRecoveryStatuses() map[string]RecoveryReport {
+	if s.recoveryMgr == nil {
+		return map[string]RecoveryReport{}
+	}
+	return s.recoveryMgr.GetAllReports()
 }
 
 func (s *Supervisor) getOrCreateRunner(siteID string) (*siteRunner, error) {

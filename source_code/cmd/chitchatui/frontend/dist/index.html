@@ -758,6 +758,10 @@
           </div>
         </section>
 
+        <div id="smgr-recovery-banner" class="smgr-recovery-banner" role="alert" aria-live="polite" hidden>
+          <span id="smgr-recovery-banner-text">Self-Recovery idle.</span>
+        </div>
+
         <div class="smgr-layout">
           <section class="card smgr-grid-card" aria-label="Site Grid">
             <div class="account-card-head">
@@ -797,6 +801,7 @@
               <div class="smgr-detail-row"><span>Session Status</span><strong id="smgr-detail-session">✅ valid</strong></div>
               <div class="smgr-detail-row"><span>Session Captured</span><span id="smgr-detail-session-captured">Not captured yet</span></div>
               <div class="smgr-detail-row"><span>Session Expiry</span><span id="smgr-detail-session-expiry">N/A</span></div>
+              <div class="smgr-detail-row"><span>Self-Recovery</span><strong id="smgr-detail-recovery-status">idle (0/3 attempts)</strong></div>
               <div class="smgr-detail-row"><span>Settings Source</span><code id="smgr-detail-override">sites/_global/settings.json</code></div>
             </div>
 
@@ -822,6 +827,28 @@
             <div class="smgr-detail-error-box">
               <span class="mode-label">Last Error Message</span>
               <p id="smgr-detail-last-error" class="hint-text">No errors recorded.</p>
+            </div>
+
+            <div class="smgr-override-section" id="smgr-recovery-section" aria-label="Agent Self-Recovery">
+              <div class="account-card-head">
+                <h3>Agent Self-Recovery (Scenarios A–E · Max 3 Attempts)</h3>
+                <span class="site-session-badge">logs/recovery.jsonl</span>
+              </div>
+              <label>
+                <span>Recovery Scenario / Trigger</span>
+                <select id="smgr-recovery-scenario-select" aria-label="Recovery Scenario">
+                  <option value="scenario_a">Scenario A · Session Expired (Auto-Login &amp; Capture)</option>
+                  <option value="scenario_b">Scenario B · Auto-Signup Fail (Form Fill &amp; Capture)</option>
+                  <option value="scenario_c">Scenario C · WS/API Broken (Switch to DOM Mode)</option>
+                  <option value="scenario_d">Scenario D · Site Structure Changed (dom_auto_scout.js)</option>
+                  <option value="scenario_e">Scenario E · Complete Failure (Manual Login Prompt)</option>
+                </select>
+              </label>
+              <div class="form-actions inline">
+                <button type="button" id="smgr-detail-recover-btn" class="primary-button">&#128736; Self-Recover Site</button>
+                <button type="button" id="smgr-detail-recovery-reset-btn" class="secondary-button">Reset Attempts (0/3)</button>
+              </div>
+              <p id="smgr-recovery-status" class="status-line" role="status" aria-live="polite">Ready for automated self-recovery.</p>
             </div>
 
             <div class="smgr-override-section" aria-label="Per-site settings overrides">

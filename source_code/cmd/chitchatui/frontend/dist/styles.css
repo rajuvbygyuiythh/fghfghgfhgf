@@ -1696,6 +1696,40 @@ details.advanced[open] summary {
   color: #b7c0b3;
 }
 
+.smgr-status-badge.status-needs_human {
+  background: rgba(215, 70, 70, 0.3);
+  border-color: rgba(255, 110, 110, 0.65);
+  color: #ffb3b3;
+}
+
+.smgr-recovery-banner {
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: rgba(154, 200, 128, 0.12);
+  color: var(--text);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.smgr-recovery-banner.banner-warn {
+  border-color: rgba(232, 189, 107, 0.55);
+  background: rgba(232, 189, 107, 0.14);
+  color: #f3d28e;
+}
+
+.smgr-recovery-banner.banner-error {
+  border-color: rgba(211, 106, 106, 0.6);
+  background: rgba(211, 106, 106, 0.16);
+  color: #ffadad;
+}
+
+.smgr-recovery-banner.banner-ok {
+  border-color: rgba(154, 200, 128, 0.55);
+  background: rgba(154, 200, 128, 0.14);
+  color: #b4e89b;
+}
+
 /* Session badges: valid, expiring, missing */
 .smgr-session-badge {
   display: inline-flex;

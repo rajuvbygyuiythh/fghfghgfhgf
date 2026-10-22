@@ -605,6 +605,88 @@ test('Prompt 11: Browserless Chat expired session auto-pause displays "needs ses
   } finally { dom.window.close(); }
 });
 
+test('Prompt 12: Agent Self-Recovery (Scenarios A-E) triggers RecoverSite, shows CAPTCHA/DOM-fallback/manual banners, and marks needs_human after 3 attempts', async () => {
+  const recoverCalls = [];
+  const resetCalls = [];
+
+  const mockSites = [
+    { id: 'chatib', name: 'Chatib.us', group: 'A', session_status: 'valid', has_saved_session: true },
+    { id: 'e_chat', name: 'E-Chat.co', group: 'D', session_status: 'missing', has_saved_session: false },
+  ];
+  const snap = snapshot({ active_site: 'chatib', sites: mockSites });
+
+  const events = {};
+  const { dom, w, d } = setup({
+    SelectSite: async (id) => mockSites.find((s) => s.id === id) || mockSites[0],
+    RecoverSite: async (siteId, scenario) => {
+      recoverCalls.push({ siteId, scenario });
+      if (scenario === 'scenario_c') {
+        return {
+          site_id: siteId,
+          scenario: 'scenario_c',
+          attempt: 1,
+          max_attempts: 3,
+          status: 'recovered',
+          switched_to_dom: true,
+          message: `${siteId}: switched to DOM mode`,
+        };
+      }
+      if (scenario === 'scenario_e') {
+        return {
+          site_id: siteId,
+          scenario: 'scenario_e',
+          attempt: 2,
+          max_attempts: 3,
+          status: 'recovered',
+          captcha_detected: true,
+          message: "I'm stuck, please login manually",
+        };
+      }
+      throw new Error(`needs_human: maximum auto-recovery attempts (3) exhausted on ${siteId}`);
+    },
+    ResetSiteRecovery: async (siteId) => {
+      resetCalls.push(siteId);
+      return { site_id: siteId, name: 'E-Chat.co', group: 'D', recovery_status: 'idle', recovery_attempts: 0, needs_human: false };
+    },
+  }, snap);
+
+  try {
+    w.runtime = { EventsOn: (name, fn) => { events[name] = fn; } };
+    w.bindEvents();
+    w.bindTabs();
+    w.fillForms(snap);
+    d.getElementById('dash-tab-site-manager').click();
+
+    // Scenario C: WS/API Broken -> Switch to DOM Mode
+    d.getElementById('smgr-recovery-scenario-select').value = 'scenario_c';
+    d.getElementById('smgr-detail-recover-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(recoverCalls[0], { siteId: 'chatib', scenario: 'scenario_c' });
+    assert.equal(d.getElementById('smgr-recovery-banner').hidden, false);
+    assert.match(d.getElementById('smgr-recovery-banner-text').textContent, /switched to DOM mode/);
+    assert.equal(d.getElementById('smgr-detail-conn-type').textContent, 'dom');
+
+    // Scenario E: Manual login + CAPTCHA notification
+    d.getElementById('smgr-recovery-scenario-select').value = 'scenario_e';
+    d.getElementById('smgr-detail-recover-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.match(d.getElementById('smgr-recovery-banner-text').textContent, /CAPTCHA Notification.*I'm stuck, please login manually/);
+
+    // 3rd failed attempt on e_chat marks status badge as "needs_human"
+    d.getElementById('smgr-recovery-scenario-select').value = 'scenario_a';
+    d.querySelector('[data-smgr-recover="e_chat"]').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(d.querySelector('[data-status-badge="e_chat"]').textContent, 'needs_human');
+    assert.match(d.getElementById('smgr-recovery-banner-text').textContent, /Needs Human/);
+
+    // Reset recovery attempts
+    d.getElementById('active-site-select').value = 'e_chat';
+    d.getElementById('smgr-detail-recovery-reset-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(resetCalls, ['e_chat']);
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {

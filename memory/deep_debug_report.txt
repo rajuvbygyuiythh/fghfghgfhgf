@@ -1,5 +1,5 @@
 ====================================================================
-DEEP DEBUG & DIAGNOSTICS REPORT (2026-10-22T13:08:42.888Z)
+DEEP DEBUG & DIAGNOSTICS REPORT (2026-10-22T13:18:03.666Z)
 OVERALL STATUS: PASS
 ====================================================================
 [Step 1 · PASS] Isolated Per-Site Folders (sites/<site_id>/): 102 site folders verified (each with site.json, dom_driver.js, <site>_protection.txt, accounts/, profiles/, logs/)

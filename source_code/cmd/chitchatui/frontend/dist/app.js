@@ -26,6 +26,7 @@ const state = {
   selectedSites: [],
   siteStatuses: {},
   sessionStatuses: {},
+  recoveryStatuses: {},
   sessFilterStatus: "all",
   detailOpen: true,
   activeSub: { show: "show-setting", bot: "bg-login" },
@@ -839,8 +840,12 @@ function groupDisplayTitle(grp) {
 
 function resolveSiteRunnerState(siteId) {
   const st = state.siteStatuses[siteId] || {};
+  const rec = state.recoveryStatuses[siteId] || {};
   const raw = String(st.status || st.state || "").toLowerCase();
   const errType = String(st.last_error_type || "").toLowerCase();
+  if (raw === "needs_human" || st.needs_human || rec.needs_human || String(st.pause_reason || "").toLowerCase() === "needs_human") {
+    return "needs_human";
+  }
   if (raw === "banned" || errType === "banned") return "banned";
   if (raw === "running" || st.running) return "running";
   if (raw === "failed" || st.failed || errType === "crash") return "failed";
@@ -991,7 +996,11 @@ function applySiteDetailView(detail) {
   const accMode = siteAccountMode(detail);
   const sessState = detail.session_status || resolveSiteSessionState(detail);
   const runnerState = detail.runner_status || resolveSiteRunnerState(siteId);
-  const connType = detail.connection_type || (grp === "A" ? "websocket" : grp === "B" || grp === "C" ? "api" : "dom");
+  const recInfo = state.recoveryStatuses[siteId] || {};
+  const stInfo = state.siteStatuses[siteId] || {};
+  const connType = recInfo.switched_to_dom
+    ? "dom"
+    : detail.connection_type || stInfo.transport || (grp === "A" ? "websocket" : grp === "B" || grp === "C" ? "api" : "dom");
 
   const titleEl = byId("smgr-detail-title");
   const badgeEl = byId("smgr-detail-status-badge");
@@ -1038,6 +1047,19 @@ function applySiteDetailView(detail) {
   const lastErr = detail.last_error || st.last_error || "";
   if (lastErrEl) {
     lastErrEl.textContent = lastErr ? `${detail.last_error_type || st.last_error_type ? `[${detail.last_error_type || st.last_error_type}] ` : ""}${lastErr}` : "No errors recorded.";
+  }
+
+  const rec = state.recoveryStatuses[siteId] || {};
+  const recAttempts = detail.recovery_attempts ?? st.recovery_attempts ?? rec.attempt ?? 0;
+  const recState = detail.recovery_status || st.recovery_status || rec.status || "idle";
+  const recMsg = detail.last_recovery_message || st.last_recovery_message || rec.message || "";
+  const recStatusEl = byId("smgr-detail-recovery-status");
+  const recResetBtn = byId("smgr-detail-recovery-reset-btn");
+  if (recStatusEl) {
+    recStatusEl.textContent = `${recState} (${recAttempts}/3 attempts)${recMsg ? ` · ${recMsg}` : ""}`;
+  }
+  if (recResetBtn) {
+    recResetBtn.textContent = `Reset Attempts (${recAttempts}/3)`;
   }
 
   const ov = detail.override || {};
@@ -1136,6 +1158,83 @@ async function refreshActiveSiteSession() {
     setStatus("smgr-status", `Session refreshed for sites/${siteId}/`, "ok");
   } catch (error) {
     setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+function showRecoveryBanner(rep) {
+  const banner = byId("smgr-recovery-banner");
+  const textEl = byId("smgr-recovery-banner-text");
+  if (!banner || !textEl || !rep) return;
+  banner.hidden = false;
+  banner.classList.remove("banner-warn", "banner-error", "banner-ok");
+  if (rep.needs_human || rep.status === "needs_human") {
+    banner.classList.add("banner-error");
+  } else if (rep.captcha_detected || rep.status === "failed") {
+    banner.classList.add("banner-warn");
+  } else {
+    banner.classList.add("banner-ok");
+  }
+  const prefix = rep.captcha_detected ? "⚠️ CAPTCHA Notification: " : rep.needs_human ? "🚨 Needs Human: " : "🛠 Self-Recovery: ";
+  textEl.textContent = `${prefix}${rep.message || `${rep.site_id} (${rep.attempt || 1}/3)`}`;
+}
+
+async function recoverSiteFor(siteIdOverride, scenarioOverride) {
+  const siteId = siteIdOverride || value("active-site-select") || "chitchat";
+  const scenario = scenarioOverride || value("smgr-recovery-scenario-select") || "scenario_a";
+  try {
+    setStatus("smgr-recovery-status", `Running self-recovery (${scenario}) for sites/${siteId}/…`);
+    const rep = await invoke("RecoverSite", siteId, scenario);
+    if (rep && rep.site_id) {
+      state.recoveryStatuses[rep.site_id] = rep;
+      if (rep.switched_to_dom) {
+        const connEl = byId("smgr-detail-conn-type");
+        if (connEl) connEl.textContent = "dom";
+      }
+      showRecoveryBanner(rep);
+      setStatus("smgr-recovery-status", rep.message || `Recovered ${siteId} (${rep.attempt}/3)`, rep.needs_human ? "error" : "ok");
+    }
+    await loadSiteDetailView(siteId);
+    await refreshSiteStatuses();
+    renderSiteManager();
+  } catch (error) {
+    const errMsg = error.message || String(error);
+    const isNeedsHuman = errMsg.includes("needs_human");
+    if (isNeedsHuman) {
+      const rep = {
+        site_id: siteId,
+        scenario,
+        attempt: 3,
+        max_attempts: 3,
+        status: "needs_human",
+        needs_human: true,
+        message: errMsg,
+      };
+      state.recoveryStatuses[siteId] = rep;
+      if (!state.siteStatuses[siteId]) state.siteStatuses[siteId] = {};
+      state.siteStatuses[siteId].status = "needs_human";
+      state.siteStatuses[siteId].needs_human = true;
+      showRecoveryBanner(rep);
+    }
+    setStatus("smgr-recovery-status", errMsg, "error");
+    renderSiteManager();
+  }
+}
+
+async function resetActiveSiteRecovery() {
+  const siteId = value("active-site-select") || "chitchat";
+  try {
+    const detail = await invoke("ResetSiteRecovery", siteId);
+    delete state.recoveryStatuses[siteId];
+    if (state.siteStatuses[siteId]) {
+      state.siteStatuses[siteId].needs_human = false;
+      state.siteStatuses[siteId].recovery_attempts = 0;
+      state.siteStatuses[siteId].recovery_status = "idle";
+    }
+    if (detail) applySiteDetailView(detail);
+    setStatus("smgr-recovery-status", `Reset recovery attempts to 0/3 for sites/${siteId}/`, "ok");
+    renderSiteManager();
+  } catch (error) {
+    setStatus("smgr-recovery-status", error.message || String(error), "error");
   }
 }
 
@@ -1335,7 +1434,17 @@ function renderSiteManager() {
         openSiteDetailPanel(s.id);
       });
 
-      actions.append(startBtn, stopBtn, browserBtn, detailBtn);
+      const recoverBtn = document.createElement("button");
+      recoverBtn.type = "button";
+      recoverBtn.className = "site-mini-btn";
+      recoverBtn.dataset.smgrRecover = s.id;
+      recoverBtn.textContent = "Recover";
+      recoverBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        recoverSiteFor(s.id);
+      });
+
+      actions.append(startBtn, stopBtn, browserBtn, detailBtn, recoverBtn);
       row.append(checkbox, nameBtn, statusBadge, sessionBadge, actions);
       row.addEventListener("click", () => openSiteDetailPanel(s.id));
       body.appendChild(row);
@@ -2396,6 +2505,8 @@ function bindActions() {
   const smgrDetailRefreshSession = byId("smgr-detail-refresh-session");
   const smgrDetailFolder = byId("smgr-detail-folder-btn");
   const smgrDetailClose = byId("smgr-detail-close-btn");
+  const smgrDetailRecover = byId("smgr-detail-recover-btn");
+  const smgrDetailRecoveryReset = byId("smgr-detail-recovery-reset-btn");
   if (smgrDetailStart) smgrDetailStart.addEventListener("click", () => startSingleSiteRunner());
   if (smgrDetailStop) smgrDetailStop.addEventListener("click", () => stopSingleSiteRunner());
   if (smgrDetailRecipe) smgrDetailRecipe.addEventListener("click", runRecipeForActiveSite);
@@ -2403,6 +2514,8 @@ function bindActions() {
   if (smgrDetailRefreshSession) smgrDetailRefreshSession.addEventListener("click", refreshActiveSiteSession);
   if (smgrDetailFolder) smgrDetailFolder.addEventListener("click", openActiveSiteFolder);
   if (smgrDetailClose) smgrDetailClose.addEventListener("click", closeSiteDetailPanel);
+  if (smgrDetailRecover) smgrDetailRecover.addEventListener("click", () => recoverSiteFor());
+  if (smgrDetailRecoveryReset) smgrDetailRecoveryReset.addEventListener("click", resetActiveSiteRecovery);
 
   const ovProxyChk = byId("smgr-ov-proxy-enabled");
   const ovModeChk = byId("smgr-ov-mode-enabled");
@@ -2513,6 +2626,13 @@ function bindEvents() {
     if (summary && summary.site_id) {
       state.sessionStatuses[summary.site_id] = summary;
       renderSessionsTab();
+      if (state.dashTab === "site-manager") renderSiteManager();
+    }
+  });
+  runtime.EventsOn("ui:recovery", (rep) => {
+    if (rep && rep.site_id) {
+      state.recoveryStatuses[rep.site_id] = rep;
+      showRecoveryBanner(rep);
       if (state.dashTab === "site-manager") renderSiteManager();
     }
   });
