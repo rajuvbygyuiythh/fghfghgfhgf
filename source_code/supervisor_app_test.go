@@ -77,4 +77,21 @@ func TestAppStartSitesStopSitesGetSiteStatusesAndBackwardCompat(t *testing.T) {
 			t.Fatalf("expected %s stopped after StopAll, got %+v", id, st)
 		}
 	}
+
+	// StartAll starts all enabled sites in the catalog, and StopAll stops them all.
+	if err := app.StartAll(); err != nil {
+		t.Fatalf("StartAll: %v", err)
+	}
+	allStatuses := app.GetSiteStatuses()
+	if len(allStatuses) < 100 {
+		t.Fatalf("expected StartAll to start >= 100 catalog sites, got %d", len(allStatuses))
+	}
+	if err := app.StopAll(); err != nil {
+		t.Fatalf("StopAll after StartAll: %v", err)
+	}
+	for id, st := range app.GetSiteStatuses() {
+		if st.Running {
+			t.Fatalf("expected %s stopped after second StopAll, got %+v", id, st)
+		}
+	}
 }

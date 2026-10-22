@@ -719,18 +719,33 @@ func (s *Supervisor) StartSelected(siteIDs []string) error {
 	return errors.New(strings.Join(msgs, "; "))
 }
 
-// StartSelectedResults starts each site in siteIDs and returns a map of any startup errors.
+// StartSelectedResults starts each site in siteIDs concurrently (with bounded
+// parallelism) and returns a map of any startup errors.
 func (s *Supervisor) StartSelectedResults(siteIDs []string) map[string]error {
-	errs := make(map[string]error)
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs = make(map[string]error)
+		sem  = make(chan struct{}, 16)
+	)
 	for _, rawID := range siteIDs {
 		id := strings.TrimSpace(rawID)
 		if id == "" {
 			continue
 		}
-		if err := s.StartSite(id); err != nil {
-			errs[id] = err
-		}
+		wg.Add(1)
+		go func(siteID string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if err := s.StartSite(siteID); err != nil {
+				mu.Lock()
+				errs[siteID] = err
+				mu.Unlock()
+			}
+		}(id)
 	}
+	wg.Wait()
 	return errs
 }
 
