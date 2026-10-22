@@ -3,37 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ChitChat Bot</title>
-  <link rel="stylesheet" href="./styles.css?v=5">
+  <title>Multi-Site Chat Engine (102 Sites)</title>
+  <link rel="stylesheet" href="./styles.css?v=6">
 </head>
 <body>
   <div class="shell visible">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">CB</div>
+        <div class="brand-mark">MS</div>
         <div>
-          <div class="brand-title">ChitChat Bot</div>
-          <div class="brand-subtitle">Multi-Site Engine</div>
+          <div class="brand-title">Multi-Site Bot</div>
+          <div class="brand-subtitle">102 Isolated Sites (A–E)</div>
         </div>
       </div>
 
       <div id="control-center-sidebar-nav" class="dash-sidebar-section active" data-dash-sidebar="control-center">
-        <div class="dash-sidebar-label">Operation Mode</div>
-        <nav class="nav" aria-label="Main modes">
+        <div class="dash-sidebar-label legacy-chitchat-only">Operation Mode</div>
+        <nav class="nav legacy-chitchat-only" aria-label="Main modes">
           <button class="nav-button active" data-tab="show">&#128421; Show Mode</button>
           <button class="nav-button" data-tab="bot">&#129302; Background Bot</button>
         </nav>
 
-        <div class="dash-sidebar-label" style="margin-top: 10px;">Configuration Sections</div>
+        <div class="dash-sidebar-label">Global Rules (All 102 Sites)</div>
         <nav class="subnav" id="subnav-show" aria-label="Show Mode sections">
-          <button class="subnav-button active" data-subpanel="show-setting">1 · Setting</button>
-          <button class="subnav-button" data-subpanel="show-proxy">2 · Proxy</button>
-          <button class="subnav-button" data-subpanel="show-message">3 · Message</button>
-          <button class="subnav-button" data-subpanel="show-run">4 · Run Browser</button>
-          <button class="subnav-button" data-subpanel="show-logs">5 · Live Logs</button>
+          <button class="subnav-button active" data-subpanel="show-setting">1 · Setting (Global Timing)</button>
+          <button class="subnav-button" data-subpanel="show-proxy">2 · Proxy (Global Pool)</button>
+          <button class="subnav-button" data-subpanel="show-message">3 · Message (Chat &amp; AI)</button>
+          <button class="subnav-button legacy-chitchat-only" data-subpanel="show-run">4 · Run Browser</button>
+          <button class="subnav-button legacy-chitchat-only" data-subpanel="show-logs">5 · Live Logs</button>
         </nav>
 
-        <nav class="subnav" id="subnav-bot" aria-label="Background Bot sections" hidden>
+        <div class="cc-extra-nav-group" aria-label="Multi-Site Monitoring and Site List">
+          <button type="button" id="cc-show-errors-nav-btn" class="cc-extra-nav-btn">4 · Error &amp; Recovery Monitor</button>
+          <button type="button" id="cc-goto-sites-nav-btn" class="cc-extra-nav-btn">&#127760; All 102 Sites (incl. ChitChat.gg)</button>
+        </div>
+
+        <nav class="subnav legacy-chitchat-only" id="subnav-bot" aria-label="Background Bot sections" hidden>
           <button class="subnav-button active" data-subpanel="bg-login">1 · Login Capture</button>
           <button class="subnav-button" data-subpanel="bg-proxy">2 · Proxy</button>
           <button class="subnav-button" data-subpanel="bg-message">3 · Message</button>
@@ -61,7 +66,7 @@
     </aside>
 
     <main class="main">
-      <div class="site-selector-box" aria-label="Target Site">
+      <div class="site-selector-box legacy-chitchat-only" aria-label="Target Site">
         <div class="site-box-top-row">
           <div class="site-box-head">
             <span class="status-label site-bar-title">Target Site (102)</span>
@@ -107,15 +112,15 @@
       <nav class="dashboard-tab-bar" id="dashboard-tab-bar" role="tablist" aria-label="Dashboard tabs">
         <button type="button" id="dash-tab-control-center" class="dash-tab-button active" role="tab" aria-selected="true" aria-controls="dash-panel-control-center" data-dash-tab="control-center">
           <span class="dash-tab-title">1 · Control Center</span>
-          <span class="dash-tab-desc">Global settings · Start/Stop · Live log</span>
+          <span class="dash-tab-desc">Global rules (all 102 sites) · Bulk Start/Stop</span>
         </button>
         <button type="button" id="dash-tab-site-manager" class="dash-tab-button" role="tab" aria-selected="false" aria-controls="dash-panel-site-manager" data-dash-tab="site-manager">
-          <span class="dash-tab-title">2 · Site Manager</span>
-          <span class="dash-tab-desc">Site grid · Group view · Per-site detail</span>
+          <span class="dash-tab-title">2 · Site Manager (102 Sites)</span>
+          <span class="dash-tab-desc">ChitChat.gg + 101 sites · Group A–E · Overrides</span>
         </button>
         <button type="button" id="dash-tab-sessions" class="dash-tab-button" role="tab" aria-selected="false" aria-controls="dash-panel-sessions" data-dash-tab="sessions">
-          <span class="dash-tab-title">3 · Sessions</span>
-          <span class="dash-tab-desc">Session capture · Health monitor</span>
+          <span class="dash-tab-title">3 · Sessions (102 Sites)</span>
+          <span class="dash-tab-desc">Session capture &amp; health (incl. ChitChat.gg)</span>
         </button>
       </nav>
       <!-- ======================= TAB 1: CONTROL CENTER ======================= -->
@@ -124,10 +129,10 @@
           <div class="cc-overview-head">
             <div>
               <div class="title-row">
-                <h2 class="cc-overview-title">Control Center · Global Settings &amp; Multi-Site Supervisor</h2>
+                <h2 class="cc-overview-title">Multi-Site Supervisor &amp; Global Rules (All 102 Sites incl. ChitChat.gg)</h2>
                 <span id="cc-global-source-badge" class="mode-badge">sites/_global/settings.json</span>
               </div>
-              <p id="cc-multi-status" class="hint-text">Global settings apply to all 102 isolated sites unless overridden in <code>sites/&lt;site_id&gt;/settings_override.json</code>.</p>
+              <p id="cc-multi-status" class="hint-text">ChitChat.gg (<code>sites/chitchat/</code>) and all 101 other sites share these global rules unless overridden in <strong>2 · Site Manager</strong>.</p>
             </div>
             <div class="actions">
               <button type="button" id="cc-start-all-btn" class="primary-button">&#9654; Start All Sites</button>
@@ -157,7 +162,7 @@
           </div>
         </section>
 
-        <section class="card cc-error-dashboard" id="cc-error-dashboard" aria-label="Control Center Error Summary and Recovery Status">
+        <section class="card cc-error-dashboard cc-card-collapsed" id="cc-error-dashboard" aria-label="Control Center Error Summary and Recovery Status">
           <div class="account-card-head">
             <div>
               <h2>Error Summary &amp; Self-Recovery Dashboard</h2>
@@ -219,7 +224,7 @@
 
       <!-- ============================ SHOW MODE ============================ -->
       <section class="tab-panel active" data-panel="show">
-        <header class="panel-header">
+        <header class="panel-header legacy-chitchat-only">
           <div>
             <div class="title-row">
               <h1>Show Mode</h1>
@@ -235,8 +240,8 @@
         <section class="subpanel active" data-subpanel="show-setting">
           <div class="subpage">
             <section class="card">
-              <h2>1 · Setting</h2>
-              <p class="hint-text">Run Browser applies these values. No separate save.</p>
+              <h2>1 · Setting — Global Timing &amp; Reply Rules (All 102 Sites)</h2>
+              <p class="hint-text">Shared timing rules in <code>sites/_global/settings.json</code> for ChitChat.gg and all 101 other sites (unless overridden per-site in <strong>2 · Site Manager</strong>).</p>
               <div class="form-grid">
                 <div class="form-grid three-column">
                   <label>
@@ -305,6 +310,10 @@
                     <input type="number" id="sm-next-max" min="0" max="86400" step="1" value="0">
                   </label>
                 </div>
+                <div class="form-actions inline">
+                  <button type="button" id="sm-save-timing" class="primary-button">Save Global Timing Rules (All 102 Sites)</button>
+                  <span id="sm-timing-save-status" class="status-line" role="status" aria-live="polite"></span>
+                </div>
               </div>
             </section>
           </div>
@@ -313,7 +322,7 @@
         <section class="subpanel" data-subpanel="show-proxy">
           <div class="subpage">
             <section class="card">
-              <h2>2 · Proxy</h2>
+              <h2>2 · Proxy — Global Proxy Pool (All 102 Sites)</h2>
               <label class="checkbox-row">
                 <input type="checkbox" id="sm-proxy-enabled">
                 <span>Enable proxy</span>
@@ -329,7 +338,8 @@
                 <span>Proxy lines</span>
                 <textarea id="sm-proxy-entries" rows="5" placeholder="1.2.3.4:8080&#10;1.2.3.5:8080:user:pass&#10;socks5://user:pass@1.2.3.6:1080"></textarea>
               </label>
-              <div class="form-actions">
+              <div class="form-actions inline">
+                <button type="button" id="sm-save-proxy" class="primary-button">Save Global Proxy (All 102 Sites)</button>
                 <button type="button" id="sm-test-proxy" class="secondary-button">Test Proxy</button>
               </div>
               <p id="sm-proxy-status" class="status-line" role="status" aria-live="polite">Not tested.</p>
@@ -341,7 +351,7 @@
         <section class="subpanel" data-subpanel="show-message">
           <div class="subpage">
             <section class="card">
-              <h2>3 · Message</h2>
+              <h2>3 · Message — Global Chat &amp; AI Mode (All 102 Sites)</h2>
               <div class="chat-mode-card">
                 <span class="mode-label">Chat mode</span>
                 <div class="mode-options">

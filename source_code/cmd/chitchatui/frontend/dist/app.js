@@ -158,6 +158,13 @@ function activateSubpanel(panel) {
   if (!panel) return;
   const mode = panel.startsWith("bg-") ? "bot" : "show";
   state.activeSub[mode] = panel;
+  const errCard = byId("cc-error-dashboard");
+  if (errCard) errCard.classList.add("cc-card-collapsed");
+  const errBtn = byId("cc-show-errors-nav-btn");
+  if (errBtn) errBtn.classList.remove("active");
+  document.querySelectorAll(".tab-panel").forEach((tp) => {
+    tp.classList.remove("cc-card-collapsed");
+  });
   document.querySelectorAll(".subpanel").forEach((el) => {
     el.classList.toggle("active", el.dataset.subpanel === panel);
   });
@@ -167,6 +174,23 @@ function activateSubpanel(panel) {
   restoreGlobalState(mode);
   if (panel === "show-logs") refreshShowLog();
   if (panel === "bg-logs") refreshBotLog();
+}
+
+function activateControlCenterErrorMonitor() {
+  if (state.dashTab !== "control-center") {
+    activateDashboardTab("control-center");
+  }
+  const errCard = byId("cc-error-dashboard");
+  if (errCard) errCard.classList.remove("cc-card-collapsed");
+  document.querySelectorAll(".tab-panel").forEach((tp) => {
+    tp.classList.add("cc-card-collapsed");
+  });
+  document.querySelectorAll(".subnav-button").forEach((button) => {
+    button.classList.remove("active");
+  });
+  const errBtn = byId("cc-show-errors-nav-btn");
+  if (errBtn) errBtn.classList.add("active");
+  refreshErrorDashboard();
 }
 
 function activateTab(tab) {
@@ -1290,6 +1314,11 @@ function renderSiteManager() {
   for (const grpCode of ["A", "B", "C", "D", "E"]) {
     const items = grouped[grpCode] || [];
     if (items.length === 0) continue;
+    items.sort((a, b) => {
+      if (a.site.id === "chitchat" && b.site.id !== "chitchat") return -1;
+      if (b.site.id === "chitchat" && a.site.id !== "chitchat") return 1;
+      return 0;
+    });
     const grpSiteIds = items.map((entry) => entry.site.id);
     const isCollapsed = !!state.collapsedGroups[grpCode];
     const allInGroupSelected = grpSiteIds.every((id) => state.selectedSites.includes(id));
@@ -3185,6 +3214,34 @@ function bindActions() {
     setStatus("sm-run-status", "Refreshed.", "ok");
   });
   byId("sm-run").addEventListener("click", runShowBrowser);
+  const smSaveTimingBtn = byId("sm-save-timing");
+  if (smSaveTimingBtn) {
+    smSaveTimingBtn.addEventListener("click", async () => {
+      try {
+        const show = readShowForm();
+        await invoke("SaveShowModeSettings", show);
+        setStatus("sm-timing-save-status", "Saved to sites/_global/settings.json (applies to ChitChat.gg + all 101 sites).", "ok");
+      } catch (err) {
+        setStatus("sm-timing-save-status", err.message || String(err), "error");
+      }
+    });
+  }
+  const smSaveProxyBtn = byId("sm-save-proxy");
+  if (smSaveProxyBtn) {
+    smSaveProxyBtn.addEventListener("click", async () => {
+      try {
+        const proxy = readProxy("sm");
+        await invoke("SaveProxySettings", proxy);
+        setStatus("sm-proxy-status", "Saved to sites/_global/settings.json (applies to ChitChat.gg + all 101 sites).", "ok");
+      } catch (err) {
+        setStatus("sm-proxy-status", err.message || String(err), "error");
+      }
+    });
+  }
+  const showErrNavBtn = byId("cc-show-errors-nav-btn");
+  if (showErrNavBtn) showErrNavBtn.addEventListener("click", activateControlCenterErrorMonitor);
+  const gotoSitesNavBtn = byId("cc-goto-sites-nav-btn");
+  if (gotoSitesNavBtn) gotoSitesNavBtn.addEventListener("click", () => activateDashboardTab("site-manager"));
   byId("sm-test-proxy").addEventListener("click", () => testProxy("sm"));
   byId("sm-load-folder").addEventListener("click", () => loadFolder("sm"));
   byId("sm-clean-loaded").addEventListener("click", () => cleanLoaded("sm"));

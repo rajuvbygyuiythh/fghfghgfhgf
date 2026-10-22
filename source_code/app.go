@@ -1159,8 +1159,35 @@ func (a *App) SaveProxySettings(settings model.ProxySettings) error {
 	return nil
 }
 
-func (a *App) SaveShowModeSettings(settings model.ShowModeSettings) error {
-	return a.uiStore.SaveShowModeSettings(settings)
+func (a *App) SaveShowModeSettings(sm model.ShowModeSettings) error {
+	if err := a.uiStore.SaveShowModeSettings(sm); err != nil {
+		return err
+	}
+	a.mirrorShowModeSettingsGlobal(sm)
+	return nil
+}
+
+func (a *App) mirrorShowModeSettingsGlobal(sm model.ShowModeSettings) {
+	st := a.settingsStore()
+	if st == nil {
+		return
+	}
+	global, err := a.loadOrSeedGlobalSettings()
+	if err != nil {
+		return
+	}
+	global.ReplyDelay = settings.DurationRange{
+		MinSeconds: sm.ReplyDelayMinSeconds,
+		MaxSeconds: sm.ReplyDelayMaxSeconds,
+	}
+	global.SkipTimeout = settings.DurationRange{
+		MinSeconds: sm.NoReplyMinSeconds,
+		MaxSeconds: sm.NoReplyMaxSeconds,
+	}
+	if sm.FirstMessage.Mode != "" {
+		global.FirstMessage = sm.FirstMessage.Effective()
+	}
+	_, _ = st.Save(global)
 }
 
 func (a *App) SaveGeneralSettings(settings model.GeneralSettings) error {

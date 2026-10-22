@@ -10,10 +10,10 @@
   "classification": {
     "group": "C",
     "group_name": "Browser-Once",
-    "confidence": "low",
-    "source": "initial_guess",
-    "reason": "Initial guess: one-time browser login or CAPTCHA/Turnstile setup before session reuse",
-    "classified_at": "2026-10-21T20:25:40Z"
+    "confidence": "high",
+    "source": "verified",
+    "reason": "Unified multi-site Group C Browser-Once site: login once in isolated sites/chitchat/ browser profile, capture session in sites/chitchat/sessions/default/, and run under global/per-site rules",
+    "classified_at": "2026-10-22T14:45:00Z"
   },
   "selectors": {
     "composer_input": "[data-chat-composer=\"true\"] textarea[aria-label=\"Send a message\"]",
