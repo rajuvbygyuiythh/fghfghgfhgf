@@ -198,6 +198,29 @@ and Wails JS bindings (`wailsjs/`). The unused legacy duplicate Go files
 * `data/input/**`, `data/output/**`, `data/countries.txt` — the TXT database
   (copied into `internal/bot/eva_assets/`).
 * `data/output/info.txt` — the author's Bangla guide of the flow.
+
+---
+
+## 6. Multi-Site 16-Prompt Master Roadmap & Mandatory 4-Step Workflow
+
+See root `../AGENTS.md` for the full verbatim specification of Prompts 1–16. Every agent MUST follow this strict 4-step workflow for each prompt:
+
+1. **PLAN FIRST:** Read `../AGENTS.md` and `source_code/AGENTS.md`, inspect the targeted files, and present the exact file-by-file Technical Plan to the user.
+2. **WAIT FOR APPROVAL:** Never edit production code for the next prompt until the user explicitly approves the plan.
+3. **FULL WORKING CODE ONLY:** Deliver 100% complete, working production code (never sketches or pseudo-code) while preserving strict per-site folder isolation (`sites/<site_id>/`, with only `sites/_global/` and `sites/_recipes/` shared).
+4. **VERIFY & UPDATE LEDGER:** Run Go and Node test suites, update the prompt status in `../AGENTS.md` and `source_code/AGENTS.md` to `[DONE]`, commit/push, and present the next prompt's plan.
+
+### Current Ledger Status
+- **Prompt 1 (Site Folder Isolation):** `[DONE — 9f959b2]`
+- **Prompt 2 (Global Settings):** `[DONE — 9477ee6]`
+- **Prompt 3 (Site Classification Group A–E):** `[DONE — 6bf970d]`
+- **Prompt 4 (Recipe System):** `[DONE — c41f71b]`
+- **Prompt 5 (Site Runner Supervisor):** `[DONE — 0493e40]`
+- **Prompt 6 (Connect Supervisor to Existing Engine):** `[DONE — 38c2d98, da58842]`
+- **Prompt 7 (Dashboard 3-Tab Structure):** `[DONE — 45500f5]`
+- **Prompt 8 (Site Grid — Tab 2):** `[IN PROGRESS — Awaiting Plan Approval]`
+- **Prompts 9–16:** `[PENDING]`
+
 * `test_flow.py` — the behaviour spec (checks mirrored in Go tests).
 
 Everything else in that zip (account_sessions, browser automation, PyQt GUI,
