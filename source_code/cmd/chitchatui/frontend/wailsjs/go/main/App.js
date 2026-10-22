@@ -322,3 +322,32 @@ export function GetErrorDashboardSummary() {
   return window['go']['main']['App']['GetErrorDashboardSummary']();
 }
 
+export function BulkStartAllReady() {
+  return window['go']['main']['App']['BulkStartAllReady']();
+}
+
+export function BulkAutoRegisterGroupB() {
+  return window['go']['main']['App']['BulkAutoRegisterGroupB']();
+}
+
+export function BulkLoginGroupCBatch(arg1) {
+  return window['go']['main']['App']['BulkLoginGroupCBatch'](arg1);
+}
+
+export function BulkRefreshAllSessions() {
+  return window['go']['main']['App']['BulkRefreshAllSessions']();
+}
+
+export function GenerateFullMultiSiteReport() {
+  return window['go']['main']['App']['GenerateFullMultiSiteReport']();
+}
+
+export function WizardProbeURL(arg1, arg2) {
+  return window['go']['main']['App']['WizardProbeURL'](arg1, arg2);
+}
+
+export function WizardCreateAndSetupSite(arg1, arg2, arg3) {
+  return window['go']['main']['App']['WizardCreateAndSetupSite'](arg1, arg2, arg3);
+}
+
+

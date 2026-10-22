@@ -148,6 +148,21 @@ export function ClearCombinedLiveLog():Promise<void>;
 
 export function GetErrorDashboardSummary():Promise<any>;
 
+export function BulkStartAllReady():Promise<any>;
+
+export function BulkAutoRegisterGroupB():Promise<any>;
+
+export function BulkLoginGroupCBatch(arg1:number):Promise<any>;
+
+export function BulkRefreshAllSessions():Promise<any>;
+
+export function GenerateFullMultiSiteReport():Promise<any>;
+
+export function WizardProbeURL(arg1:string,arg2:string):Promise<any>;
+
+export function WizardCreateAndSetupSite(arg1:string,arg2:string,arg3:string):Promise<any>;
+
+
 
 export function GetStatus(arg1:string):Promise<any>;
 

@@ -129,6 +129,26 @@
               <button type="button" id="cc-jump-logs-btn" class="secondary-button">Live Logs</button>
             </div>
           </div>
+
+          <div class="cc-bulk-ops-bar" id="cc-bulk-ops-card" aria-label="Control Center Bulk Operations">
+            <div class="cc-bulk-buttons">
+              <button type="button" id="cc-bulk-start-ready-btn" class="primary-button">&#9654; Start All Ready</button>
+              <button type="button" id="cc-bulk-stop-all-btn" class="secondary-button">&#9632; Stop All</button>
+              <button type="button" id="cc-bulk-autoreg-b-btn" class="secondary-button">&#9889; Auto-Register All Group B</button>
+              <button type="button" id="cc-bulk-login-c-btn" class="secondary-button">&#127760; Login All Group C (Batch 5)</button>
+              <button type="button" id="cc-bulk-refresh-sessions-btn" class="secondary-button">&#128260; Refresh All Sessions</button>
+              <button type="button" id="cc-bulk-full-report-btn" class="secondary-button">&#128202; Full Report</button>
+            </div>
+            <div id="cc-bulk-progress-wrap" class="cc-bulk-progress-wrap" hidden>
+              <div class="cc-bulk-progress-track" id="cc-bulk-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="cc-bulk-progress-fill" id="cc-bulk-progress-fill" style="width: 0%;"></div>
+              </div>
+              <span id="cc-bulk-progress-text" class="status-line">0% · Idle (max 10 concurrent)</span>
+            </div>
+            <div id="cc-bulk-report-box" class="cc-bulk-report-box" hidden>
+              <pre id="cc-bulk-report-text" class="cc-bulk-report-text"></pre>
+            </div>
+          </div>
         </section>
 
         <section class="card cc-error-dashboard" id="cc-error-dashboard" aria-label="Control Center Error Summary and Recovery Status">
@@ -774,6 +794,7 @@
             <p>Site grid, Group A–E classification view, and per-site detail inspector. Every site is strictly isolated inside <code>sites/&lt;site_id&gt;/</code>.</p>
           </div>
           <div class="actions">
+            <button type="button" id="smgr-add-site-btn" class="primary-button">+ Add Site</button>
             <button type="button" id="smgr-start-selected-btn" class="primary-button">&#9654; Start Selected</button>
             <button type="button" id="smgr-stop-selected-btn" class="secondary-button">&#9632; Stop Selected</button>
             <button type="button" id="smgr-refresh-btn" class="secondary-button">Refresh</button>
@@ -781,6 +802,73 @@
         </header>
 
         <p id="smgr-status" class="status-line" role="status" aria-live="polite">Select a group or site to inspect and control.</p>
+
+        <section class="card smgr-wizard-card" id="smgr-add-wizard-modal" aria-label="Add Site 4-Step Wizard" hidden>
+          <div class="account-card-head">
+            <div>
+              <h2>+ Add Site Wizard (4-Step Automated Onboarding)</h2>
+              <p class="hint-text">Creates an isolated <code>sites/&lt;site_id&gt;/</code> folder, auto-probes Group A–E classification, and executes the group setup recipe.</p>
+            </div>
+            <button type="button" id="wiz-close-btn" class="secondary-button smgr-mini-btn">&#10005; Close</button>
+          </div>
+
+          <div class="wiz-stepper" id="wiz-stepper">
+            <span class="site-filter-pill active" id="wiz-pill-step-1" data-wiz-step-pill="1">1 · URL Input</span>
+            <span class="site-filter-pill" id="wiz-pill-step-2" data-wiz-step-pill="2">2 · Auto-Probing</span>
+            <span class="site-filter-pill" id="wiz-pill-step-3" data-wiz-step-pill="3">3 · Setup Execution</span>
+            <span class="site-filter-pill" id="wiz-pill-step-4" data-wiz-step-pill="4">4 · Result</span>
+          </div>
+
+          <!-- Step 1: URL Input -->
+          <div id="wiz-step-1" class="wiz-step-panel">
+            <div class="form-grid two-column">
+              <label>
+                <span>Site Name (optional)</span>
+                <input type="text" id="wiz-site-name" placeholder="e.g. NewStrangerChat">
+              </label>
+              <label>
+                <span>Target Chat URL</span>
+                <input type="url" id="wiz-site-url" placeholder="https://example-chat.com/chat">
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="wiz-step1-next-btn" class="primary-button">Next: Auto-Probe URL &#8594;</button>
+            </div>
+          </div>
+
+          <!-- Step 2: Auto-Probing -->
+          <div id="wiz-step-2" class="wiz-step-panel" hidden>
+            <div class="wiz-probe-box">
+              <span id="wiz-probe-spinner" class="mode-badge">&#9203; Probing…</span>
+              <strong id="wiz-probe-group-badge" class="mode-badge">Group B · HTTP Auto-Signup</strong>
+              <span id="wiz-probe-confidence" class="smgr-badge">Confidence: high</span>
+            </div>
+            <p id="wiz-probe-reason" class="status-line">Analyzing endpoints and anti-bot protection…</p>
+            <div id="wiz-probe-steps-preview" class="hint-text"></div>
+            <div class="form-actions">
+              <button type="button" id="wiz-step2-run-setup-btn" class="primary-button">&#9881; Execute Setup Recipe &#8594;</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Setup Execution -->
+          <div id="wiz-step-3" class="wiz-step-panel" hidden>
+            <p id="wiz-setup-progress-text" class="status-line">Executing isolated setup recipe…</p>
+            <div id="wiz-setup-steps-list" class="wiz-setup-steps-list"></div>
+          </div>
+
+          <!-- Step 4: Result -->
+          <div id="wiz-step-4" class="wiz-step-panel" hidden>
+            <div class="wiz-result-head">
+              <span>Final Setup Status:</span>
+              <span id="wiz-result-badge" class="smgr-status-badge status-running">ready</span>
+              <code id="wiz-result-folder">sites/new_site/</code>
+            </div>
+            <p id="wiz-result-summary" class="status-line">Site setup completed.</p>
+            <div class="form-actions">
+              <button type="button" id="wiz-result-next-action-btn" class="primary-button">Start Site Now</button>
+            </div>
+          </div>
+        </section>
 
         <section class="card smgr-toolbar-card">
           <div class="smgr-group-bar" id="smgr-group-bar" role="group" aria-label="Filter sites by classification group">

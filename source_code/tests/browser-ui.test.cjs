@@ -838,6 +838,141 @@ test('Prompt 13: Combined Live Log bottom bar (visible across all tabs, group co
   } finally { dom.window.close(); }
 });
 
+test('Prompt 14: Bulk Operations (Start All Ready, Stop All, Auto-Register Group B, Login Group C batch 5, Refresh All Sessions, Full Report + progress bar) and 4-Step Add Site Wizard', async () => {
+  const calls = [];
+  const mockSites = [
+    { id: 'chatib', name: 'Chatib.us', group: 'A', session_status: 'valid', has_saved_session: true },
+    { id: 'chitchat', name: 'ChitChat.gg', group: 'B', session_status: 'valid', has_saved_session: true },
+    { id: 'emeraldchat', name: 'EmeraldChat.com', group: 'C', session_status: 'missing', has_saved_session: false },
+  ];
+  const snap = snapshot({ active_site: 'chatib', sites: mockSites });
+
+  const { dom, w, d } = setup({
+    BulkStartAllReady: async () => {
+      calls.push('BulkStartAllReady');
+      return { operation: 'Start All Ready', max_concurrent: 10, total: 12, succeeded: 11, failed: 1, summary: 'Start All Ready complete: 11/12 succeeded, 1 failed (max 10 concurrent).' };
+    },
+    StopAll: async () => {
+      calls.push('StopAll');
+    },
+    BulkAutoRegisterGroupB: async () => {
+      calls.push('BulkAutoRegisterGroupB');
+      return { operation: 'Auto-Register All Group B', max_concurrent: 10, total: 34, succeeded: 33, failed: 1, summary: 'Auto-Register All Group B complete: 33/34 succeeded, 1 failed (max 10 concurrent).' };
+    },
+    BulkLoginGroupCBatch: async (batchSize) => {
+      calls.push(`BulkLoginGroupCBatch:${batchSize}`);
+      return { operation: 'Login All Group C', max_concurrent: 10, total: 5, succeeded: 5, failed: 0, summary: 'Login All Group C (Batch 5) complete: 5/5 succeeded, 0 failed.' };
+    },
+    BulkRefreshAllSessions: async () => {
+      calls.push('BulkRefreshAllSessions');
+      return { operation: 'Refresh All Sessions', max_concurrent: 10, total: 102, succeeded: 102, failed: 0, summary: 'Refresh All Sessions complete: 102/102 succeeded, 0 failed (max 10 concurrent).' };
+    },
+    GenerateFullMultiSiteReport: async () => {
+      calls.push('GenerateFullMultiSiteReport');
+      return {
+        total_sites: 102,
+        ready_sites: 86,
+        summary: 'Full Report (102 sites): Ready=86 | Running=12 | Valid Sessions=86 | Groups A=20 B=34 C=12 D=32 E=4',
+      };
+    },
+    WizardProbeURL: async (name, url) => {
+      calls.push(`WizardProbeURL:${name}:${url}`);
+      return {
+        site_name: name || 'TalkGuest',
+        start_url: url,
+        group: 'A',
+        group_name: 'Pure Browserless Guest',
+        confidence: 'high',
+        reason: 'Zero-registration guest chat endpoint detected',
+        recipe_steps: ['open_ws_or_guest_api', 'capture_guest_token', 'verify_chat_ready'],
+      };
+    },
+    WizardCreateAndSetupSite: async (name, url, group) => {
+      calls.push(`WizardCreateAndSetupSite:${name}:${url}:${group}`);
+      return {
+        site_id: 'talkguest',
+        site_name: name || 'TalkGuest',
+        start_url: url,
+        folder_path: 'sites/talkguest/',
+        group: 'A',
+        group_name: 'Pure Browserless Guest',
+        result_status: 'ready',
+        steps: [
+          { step_id: 'open_ws_or_guest_api', action: 'http_get', success: true, detail: '200 OK' },
+          { step_id: 'capture_guest_token', action: 'extract_token', success: true, detail: 'guest token saved' },
+        ],
+        next_action: 'start_site',
+        next_action_label: 'Start Site Now',
+        summary: 'Site TalkGuest (talkguest) created in sites/talkguest/ -> Group A [ready]',
+      };
+    },
+    StartSite: async (siteId) => {
+      calls.push(`StartSite:${siteId}`);
+    },
+  }, snap);
+
+  try {
+    w.bindTabs();
+    w.fillForms(snap);
+
+    // 1. Bulk Operations in Control Center
+    d.getElementById('cc-bulk-start-ready-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(d.getElementById('cc-bulk-progress-wrap').hidden, false);
+    assert.equal(d.getElementById('cc-bulk-progress-bar').getAttribute('aria-valuenow'), '100');
+    assert.match(d.getElementById('cc-bulk-progress-text').textContent, /11\/12 succeeded, 1 failed/);
+
+    d.getElementById('cc-bulk-stop-all-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+
+    d.getElementById('cc-bulk-autoreg-b-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.match(d.getElementById('cc-bulk-progress-text').textContent, /33\/34 succeeded/);
+
+    d.getElementById('cc-bulk-login-c-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.match(d.getElementById('cc-bulk-progress-text').textContent, /Batch 5/);
+
+    d.getElementById('cc-bulk-refresh-sessions-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.match(d.getElementById('cc-bulk-progress-text').textContent, /102\/102 succeeded/);
+
+    d.getElementById('cc-bulk-full-report-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(d.getElementById('cc-bulk-report-box').hidden, false);
+    assert.match(d.getElementById('cc-bulk-report-text').textContent, /Full Report \(102 sites\)/);
+
+    // 2. 4-Step Add Site Wizard in Site Manager
+    d.getElementById('dash-tab-site-manager').click();
+    d.getElementById('smgr-add-site-btn').click();
+    assert.equal(d.getElementById('smgr-add-wizard-modal').hidden, false);
+    assert.equal(d.getElementById('wiz-step-1').hidden, false);
+
+    // Step 1 -> Step 2 (Auto-Probing)
+    d.getElementById('wiz-site-name').value = 'TalkGuest';
+    d.getElementById('wiz-site-url').value = 'https://talkguest.example/chat';
+    d.getElementById('wiz-step1-next-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(d.getElementById('wiz-step-2').hidden, false);
+    assert.match(d.getElementById('wiz-probe-group-badge').textContent, /Group A/);
+    assert.match(d.getElementById('wiz-probe-steps-preview').textContent, /open_ws_or_guest_api/);
+
+    // Step 2 -> Step 3 -> Step 4 (Setup Execution & Final Result)
+    d.getElementById('wiz-step2-run-setup-btn').click();
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(d.getElementById('wiz-step-4').hidden, false);
+    assert.equal(d.getElementById('wiz-result-badge').textContent, 'ready');
+    assert.equal(d.getElementById('wiz-result-folder').textContent, 'sites/talkguest/');
+    assert.equal(d.getElementById('wiz-result-next-action-btn').textContent, 'Start Site Now');
+
+    // Trigger Next Action -> Starts the new site and closes wizard
+    d.getElementById('wiz-result-next-action-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(d.getElementById('smgr-add-wizard-modal').hidden, true);
+    assert.ok(calls.includes('StartSite:talkguest'));
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {

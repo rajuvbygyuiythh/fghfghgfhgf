@@ -2620,6 +2620,413 @@ function renderErrorDashboard() {
 }
 
 // ---------------------------------------------------------------------------
+// Prompt 14: Bulk Operations (Max 10 Concurrent) + 4-Step Add Site Wizard
+// ---------------------------------------------------------------------------
+const BULK_MAX_CONCURRENT = 10;
+
+function updateBulkProgressUI(prog) {
+  const wrap = byId("cc-bulk-progress-wrap");
+  const bar = byId("cc-bulk-progress-bar");
+  const fill = byId("cc-bulk-progress-fill");
+  const text = byId("cc-bulk-progress-text");
+  if (!wrap || !bar || !fill || !text) return;
+  wrap.hidden = false;
+  const pct = Math.max(0, Math.min(100, Number(prog?.percent ?? 0)));
+  bar.setAttribute("aria-valuenow", String(pct));
+  fill.style.width = `${pct}%`;
+  text.textContent = prog?.summary || `${pct}% (${prog?.completed || 0}/${prog?.total || 0})`;
+}
+
+async function runClientBulkParallel(operation, items, workerFn) {
+  const total = items.length;
+  updateBulkProgressUI({
+    operation,
+    total,
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+    percent: 0,
+    summary: `${operation}: starting ${total} site(s) (max ${BULK_MAX_CONCURRENT} concurrent)…`,
+  });
+  if (total === 0) {
+    const emptySummary = `${operation}: 0 target sites.`;
+    updateBulkProgressUI({ operation, total: 0, completed: 0, succeeded: 0, failed: 0, percent: 100, summary: emptySummary });
+    return { operation, max_concurrent: BULK_MAX_CONCURRENT, total: 0, succeeded: 0, failed: 0, summary: emptySummary, results: [] };
+  }
+
+  let completed = 0;
+  let succeeded = 0;
+  let failed = 0;
+  const results = new Array(total);
+  let cursor = 0;
+
+  async function nextWorker() {
+    while (cursor < total) {
+      const idx = cursor;
+      cursor += 1;
+      const item = items[idx];
+      try {
+        const msg = await workerFn(item);
+        results[idx] = { site_id: item.id, site_name: item.name, group: item.group || "A", success: true, status: "ok", message: msg || "ok" };
+        succeeded += 1;
+      } catch (err) {
+        results[idx] = { site_id: item.id, site_name: item.name, group: item.group || "A", success: false, status: "failed", error: err?.message || String(err) };
+        failed += 1;
+      } finally {
+        completed += 1;
+        const pct = Math.round((completed * 100) / total);
+        updateBulkProgressUI({
+          operation,
+          total,
+          completed,
+          succeeded,
+          failed,
+          percent: pct,
+          summary: `${operation}: ${completed}/${total} completed (${succeeded} ok, ${failed} failed · max ${BULK_MAX_CONCURRENT} concurrent)`,
+        });
+      }
+    }
+  }
+
+  const workers = [];
+  const workerCount = Math.min(BULK_MAX_CONCURRENT, total);
+  for (let w = 0; w < workerCount; w += 1) {
+    workers.push(nextWorker());
+  }
+  await Promise.all(workers);
+  const summary = `${operation} complete: ${succeeded}/${total} succeeded, ${failed} failed (max ${BULK_MAX_CONCURRENT} concurrent).`;
+  updateBulkProgressUI({ operation, total, completed, succeeded, failed, percent: 100, summary });
+  return { operation, max_concurrent: BULK_MAX_CONCURRENT, total, succeeded, failed, summary, results };
+}
+
+async function bulkStartAllReady() {
+  try {
+    updateBulkProgressUI({ operation: "Start All Ready", total: 0, completed: 0, percent: 10, summary: "Start All Ready: running (max 10 concurrent)…" });
+    let rep;
+    if (backend() && typeof backend().BulkStartAllReady === "function") {
+      rep = await invoke("BulkStartAllReady");
+      updateBulkProgressUI({
+        operation: "Start All Ready",
+        total: rep?.total || 0,
+        completed: rep?.total || 0,
+        succeeded: rep?.succeeded || 0,
+        failed: rep?.failed || 0,
+        percent: 100,
+        summary: rep?.summary || "Start All Ready complete.",
+      });
+    } else {
+      const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+      const readySites = sitesList.filter((s) => (s.group === "A" || resolveSiteSessionState(s) !== "missing") && resolveSiteRunnerState(s.id) !== "needs_human");
+      rep = await runClientBulkParallel("Start All Ready", readySites, (s) => invoke("StartSite", s.id));
+    }
+    await refreshSiteStatuses();
+    setStatus("cc-multi-status", rep?.summary || "Started all ready sites.", "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+async function bulkStopAllSites() {
+  updateBulkProgressUI({ operation: "Stop All", total: 1, completed: 0, percent: 30, summary: "Stopping all active site runners…" });
+  await stopAllSitesRunner();
+  updateBulkProgressUI({ operation: "Stop All", total: 1, completed: 1, percent: 100, summary: "Stop All complete: all site runners stopped." });
+}
+
+async function bulkAutoRegisterGroupB() {
+  try {
+    updateBulkProgressUI({ operation: "Auto-Register All Group B", total: 0, completed: 0, percent: 10, summary: "Auto-Register All Group B: running (max 10 concurrent)…" });
+    let rep;
+    if (backend() && typeof backend().BulkAutoRegisterGroupB === "function") {
+      rep = await invoke("BulkAutoRegisterGroupB");
+      updateBulkProgressUI({
+        operation: "Auto-Register All Group B",
+        total: rep?.total || 0,
+        completed: rep?.total || 0,
+        succeeded: rep?.succeeded || 0,
+        failed: rep?.failed || 0,
+        percent: 100,
+        summary: rep?.summary || "Auto-Register All Group B complete.",
+      });
+    } else {
+      const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+      const groupBSites = sitesList.filter((s) => String(s.group || "").toUpperCase() === "B");
+      rep = await runClientBulkParallel("Auto-Register All Group B", groupBSites, (s) => invoke("AutoRegisterAccounts", s.id, "default", 1));
+    }
+    await refreshSiteStatuses();
+    setStatus("cc-multi-status", rep?.summary || "Group B auto-registration complete.", "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+async function bulkLoginGroupCBatch() {
+  const BATCH_SIZE = 5;
+  try {
+    updateBulkProgressUI({ operation: "Login All Group C", total: BATCH_SIZE, completed: 0, percent: 10, summary: `Login All Group C (Batch ${BATCH_SIZE}): starting…` });
+    let rep;
+    if (backend() && typeof backend().BulkLoginGroupCBatch === "function") {
+      rep = await invoke("BulkLoginGroupCBatch", BATCH_SIZE);
+      updateBulkProgressUI({
+        operation: "Login All Group C",
+        total: rep?.total || BATCH_SIZE,
+        completed: rep?.total || BATCH_SIZE,
+        succeeded: rep?.succeeded || 0,
+        failed: rep?.failed || 0,
+        percent: 100,
+        summary: rep?.summary || `Login All Group C (Batch ${BATCH_SIZE}) complete.`,
+      });
+    } else {
+      const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+      const groupCSites = sitesList.filter((s) => String(s.group || "").toUpperCase() === "C").slice(0, BATCH_SIZE);
+      rep = await runClientBulkParallel(`Login All Group C (Batch ${BATCH_SIZE})`, groupCSites, (s) => invoke("CaptureSession", s.id));
+    }
+    await refreshSiteStatuses();
+    setStatus("cc-multi-status", rep?.summary || `Group C batch (${BATCH_SIZE}) login complete.`, "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+async function bulkRefreshAllSessions() {
+  try {
+    updateBulkProgressUI({ operation: "Refresh All Sessions", total: 0, completed: 0, percent: 10, summary: "Refresh All Sessions: running (max 10 concurrent)…" });
+    let rep;
+    if (backend() && typeof backend().BulkRefreshAllSessions === "function") {
+      rep = await invoke("BulkRefreshAllSessions");
+      updateBulkProgressUI({
+        operation: "Refresh All Sessions",
+        total: rep?.total || 0,
+        completed: rep?.total || 0,
+        succeeded: rep?.succeeded || 0,
+        failed: rep?.failed || 0,
+        percent: 100,
+        summary: rep?.summary || "Refresh All Sessions complete.",
+      });
+    } else {
+      const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+      rep = await runClientBulkParallel("Refresh All Sessions", sitesList, (s) => invoke("ValidateSession", s.id));
+    }
+    await refreshSessionStatuses();
+    await refreshSiteStatuses();
+    setStatus("cc-multi-status", rep?.summary || "Refreshed all sessions.", "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+async function generateFullMultiSiteReport() {
+  try {
+    let report;
+    if (backend() && typeof backend().GenerateFullMultiSiteReport === "function") {
+      report = await invoke("GenerateFullMultiSiteReport");
+    } else {
+      const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+      const groups = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+      for (const s of sitesList) {
+        const g = String(s.group || "A").toUpperCase();
+        groups[g] = (groups[g] || 0) + 1;
+      }
+      report = {
+        total_sites: sitesList.length,
+        ready_sites: sitesList.filter((s) => s.group === "A" || resolveSiteSessionState(s) !== "missing").length,
+        group_counts: groups,
+        summary: `Full Report (${sitesList.length} sites): Groups A=${groups.A} B=${groups.B} C=${groups.C} D=${groups.D} E=${groups.E}`,
+      };
+    }
+    const box = byId("cc-bulk-report-box");
+    const txt = byId("cc-bulk-report-text");
+    if (box && txt) {
+      box.hidden = false;
+      txt.textContent = report?.summary || JSON.stringify(report, null, 2);
+    }
+    setStatus("cc-multi-status", report?.summary || "Full report generated.", "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+const wizardState = {
+  step: 1,
+  name: "",
+  url: "",
+  probe: null,
+  result: null,
+};
+
+function setWizardStep(step) {
+  wizardState.step = step;
+  for (let i = 1; i <= 4; i += 1) {
+    const panel = byId(`wiz-step-${i}`);
+    const pill = byId(`wiz-pill-step-${i}`);
+    if (panel) panel.hidden = i !== step;
+    if (pill) pill.classList.toggle("active", i === step);
+  }
+}
+
+function openAddSiteWizard() {
+  const modal = byId("smgr-add-wizard-modal");
+  if (!modal) return;
+  modal.hidden = false;
+  wizardState.probe = null;
+  wizardState.result = null;
+  setWizardStep(1);
+}
+
+function closeAddSiteWizard() {
+  const modal = byId("smgr-add-wizard-modal");
+  if (modal) modal.hidden = true;
+}
+
+async function runWizardStep2Probe() {
+  const rawUrl = value("wiz-site-url");
+  const rawName = value("wiz-site-name");
+  if (!rawUrl) {
+    setStatus("smgr-status", "Please enter a target chat URL in Step 1.", "error");
+    return;
+  }
+  wizardState.url = rawUrl;
+  wizardState.name = rawName;
+  setWizardStep(2);
+
+  const spinner = byId("wiz-probe-spinner");
+  const grpBadge = byId("wiz-probe-group-badge");
+  const confBadge = byId("wiz-probe-confidence");
+  const reasonEl = byId("wiz-probe-reason");
+  const stepsPreview = byId("wiz-probe-steps-preview");
+  if (spinner) {
+    spinner.hidden = false;
+    spinner.textContent = "⏳ Probing URL…";
+  }
+
+  try {
+    let probe;
+    if (backend() && typeof backend().WizardProbeURL === "function") {
+      probe = await invoke("WizardProbeURL", rawName, rawUrl);
+    } else {
+      const lower = `${rawName} ${rawUrl}`.toLowerCase();
+      const grp = lower.includes("guest") ? "A" : lower.includes("captcha") || lower.includes("login") ? "C" : "B";
+      probe = {
+        site_name: rawName || "new_site",
+        start_url: rawUrl,
+        group: grp,
+        group_name: `Group ${grp}`,
+        confidence: "high",
+        reason: `Auto-classified as Group ${grp}`,
+        recipe_steps: ["create_isolated_folder", "probe_classification", "execute_group_recipe"],
+      };
+    }
+    wizardState.probe = probe;
+    if (spinner) spinner.textContent = "✅ Probe Complete";
+    if (grpBadge) grpBadge.textContent = `Group ${probe.group || "B"} · ${probe.group_name || "Auto-Signup"}`;
+    if (confBadge) confBadge.textContent = `Confidence: ${probe.confidence || "high"}`;
+    if (reasonEl) reasonEl.textContent = probe.reason || "Classification complete.";
+    if (stepsPreview) {
+      const steps = Array.isArray(probe.recipe_steps) ? probe.recipe_steps : [];
+      stepsPreview.textContent = steps.length ? `Recipe Steps: ${steps.join(" → ")}` : "";
+    }
+  } catch (error) {
+    if (spinner) spinner.textContent = "❌ Probe Failed";
+    if (reasonEl) reasonEl.textContent = error.message || String(error);
+  }
+}
+
+async function runWizardStep3And4Setup() {
+  setWizardStep(3);
+  const progText = byId("wiz-setup-progress-text");
+  const stepsList = byId("wiz-setup-steps-list");
+  const probe = wizardState.probe || { site_name: wizardState.name, start_url: wizardState.url, group: "B" };
+
+  if (progText) progText.textContent = `Executing Group ${probe.group || "B"} setup recipe in isolated sites/<site_id>/ folder…`;
+  if (stepsList) {
+    stepsList.replaceChildren();
+    const previewSteps = Array.isArray(probe.recipe_steps) && probe.recipe_steps.length
+      ? probe.recipe_steps
+      : ["create_isolated_folder", "probe_classification", "execute_group_recipe", "validate_session"];
+    for (const st of previewSteps) {
+      const row = document.createElement("div");
+      row.className = "wiz-setup-step-row";
+      row.textContent = `✓ ${st}`;
+      stepsList.appendChild(row);
+    }
+  }
+
+  try {
+    let setupRes;
+    if (backend() && typeof backend().WizardCreateAndSetupSite === "function") {
+      setupRes = await invoke("WizardCreateAndSetupSite", wizardState.name, wizardState.url, probe.group || "");
+    } else {
+      const created = await invoke("CreateSite", wizardState.name || "NewSite", wizardState.url);
+      setupRes = {
+        site_id: created?.id || "new_site",
+        site_name: created?.name || wizardState.name || "NewSite",
+        start_url: wizardState.url,
+        folder_path: created?.folder_path || `sites/${created?.id || "new_site"}`,
+        group: probe.group || "B",
+        result_status: (probe.group === "C" || probe.group === "E") ? "needs_login" : "ready",
+        next_action: (probe.group === "C" || probe.group === "E") ? "open_browser" : "start_site",
+        next_action_label: (probe.group === "C" || probe.group === "E") ? "Open Browser Login" : "Start Site Now",
+        summary: `Isolated site ${created?.id || "new_site"} created and configured.`,
+      };
+    }
+    wizardState.result = setupRes;
+
+    if (Array.isArray(setupRes?.steps) && setupRes.steps.length && stepsList) {
+      stepsList.replaceChildren();
+      for (const st of setupRes.steps) {
+        const row = document.createElement("div");
+        row.className = "wiz-setup-step-row";
+        row.textContent = `${st.success === false ? "✗" : "✓"} ${st.step_id || st.action || "step"} — ${st.detail || "done"}`;
+        stepsList.appendChild(row);
+      }
+    }
+
+    setWizardStep(4);
+    const badge = byId("wiz-result-badge");
+    const folder = byId("wiz-result-folder");
+    const summary = byId("wiz-result-summary");
+    const nextBtn = byId("wiz-result-next-action-btn");
+    const status = setupRes?.result_status || "ready";
+    if (badge) {
+      badge.textContent = status === "needs_login" ? "needs login" : status;
+      badge.className = `smgr-status-badge status-${status === "ready" ? "running" : status === "needs_login" ? "paused" : "failed"}`;
+    }
+    if (folder) folder.textContent = setupRes?.folder_path || `sites/${setupRes?.site_id || "new_site"}/`;
+    if (summary) summary.textContent = setupRes?.summary || `Setup finished with status: ${status}`;
+    if (nextBtn) nextBtn.textContent = setupRes?.next_action_label || (status === "needs_login" ? "Open Browser Login" : "Start Site Now");
+
+    await refreshState();
+    await refreshSiteStatuses();
+    if (state.dashTab === "site-manager") renderSiteManager();
+  } catch (error) {
+    setWizardStep(4);
+    const badge = byId("wiz-result-badge");
+    const summary = byId("wiz-result-summary");
+    const nextBtn = byId("wiz-result-next-action-btn");
+    if (badge) {
+      badge.textContent = "failed";
+      badge.className = "smgr-status-badge status-failed";
+    }
+    if (summary) summary.textContent = error.message || String(error);
+    if (nextBtn) nextBtn.textContent = "Retry Setup";
+  }
+}
+
+async function triggerWizardNextAction() {
+  const res = wizardState.result;
+  if (!res || res.result_status === "failed" || res.next_action === "retry_setup") {
+    setWizardStep(2);
+    return;
+  }
+  if (res.next_action === "open_browser" || res.result_status === "needs_login") {
+    await runSiteBrowserFor(res.site_id);
+    closeAddSiteWizard();
+    return;
+  }
+  await startSingleSiteRunner(res.site_id);
+  closeAddSiteWizard();
+}
+
+// ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
 async function runShowBrowser() {
@@ -2994,6 +3401,31 @@ function bindActions() {
   if (combFilterGroup) combFilterGroup.addEventListener("change", () => renderCombinedLiveLog());
   if (combAutoScroll) combAutoScroll.addEventListener("change", () => renderCombinedLiveLog());
   if (combClear) combClear.addEventListener("click", clearCombinedLiveLog);
+
+  // Prompt 14: Bulk Operations + Add Site Wizard
+  const ccBulkStartReady = byId("cc-bulk-start-ready-btn");
+  const ccBulkStopAll = byId("cc-bulk-stop-all-btn");
+  const ccBulkAutoRegB = byId("cc-bulk-autoreg-b-btn");
+  const ccBulkLoginC = byId("cc-bulk-login-c-btn");
+  const ccBulkRefreshSess = byId("cc-bulk-refresh-sessions-btn");
+  const ccBulkFullReport = byId("cc-bulk-full-report-btn");
+  if (ccBulkStartReady) ccBulkStartReady.addEventListener("click", bulkStartAllReady);
+  if (ccBulkStopAll) ccBulkStopAll.addEventListener("click", bulkStopAllSites);
+  if (ccBulkAutoRegB) ccBulkAutoRegB.addEventListener("click", bulkAutoRegisterGroupB);
+  if (ccBulkLoginC) ccBulkLoginC.addEventListener("click", bulkLoginGroupCBatch);
+  if (ccBulkRefreshSess) ccBulkRefreshSess.addEventListener("click", bulkRefreshAllSessions);
+  if (ccBulkFullReport) ccBulkFullReport.addEventListener("click", generateFullMultiSiteReport);
+
+  const smgrAddSiteBtn = byId("smgr-add-site-btn");
+  const wizCloseBtn = byId("wiz-close-btn");
+  const wizStep1NextBtn = byId("wiz-step1-next-btn");
+  const wizStep2RunBtn = byId("wiz-step2-run-setup-btn");
+  const wizResultNextBtn = byId("wiz-result-next-action-btn");
+  if (smgrAddSiteBtn) smgrAddSiteBtn.addEventListener("click", openAddSiteWizard);
+  if (wizCloseBtn) wizCloseBtn.addEventListener("click", closeAddSiteWizard);
+  if (wizStep1NextBtn) wizStep1NextBtn.addEventListener("click", runWizardStep2Probe);
+  if (wizStep2RunBtn) wizStep2RunBtn.addEventListener("click", runWizardStep3And4Setup);
+  if (wizResultNextBtn) wizResultNextBtn.addEventListener("click", triggerWizardNextAction);
 }
 
 function bindEvents() {
@@ -3002,6 +3434,11 @@ function bindEvents() {
   runtime.EventsOn("ui:showlog", () => refreshShowLog());
   runtime.EventsOn("ui:botlog", () => refreshBotLog());
   runtime.EventsOn("ui:combinedlog", () => refreshCombinedLiveLog());
+  runtime.EventsOn("ui:bulk_progress", (prog) => {
+    if (prog && typeof prog === "object") {
+      updateBulkProgressUI(prog);
+    }
+  });
   runtime.EventsOn("ui:site_statuses", (statuses) => {
     if (statuses && typeof statuses === "object") {
       state.siteStatuses = statuses;

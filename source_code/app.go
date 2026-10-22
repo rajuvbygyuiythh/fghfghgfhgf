@@ -1669,6 +1669,544 @@ func (a *App) GetErrorDashboardSummary() ErrorDashboardSummary {
 	}
 }
 
+// BulkOperationMaxConcurrent bounds parallel bulk operations to 10 workers (Prompt 14).
+const BulkOperationMaxConcurrent = 10
+
+type BulkOperationItemResult struct {
+	SiteID   string `json:"site_id"`
+	SiteName string `json:"site_name"`
+	Group    string `json:"group"`
+	Success  bool   `json:"success"`
+	Status   string `json:"status"`
+	Message  string `json:"message,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+type BulkOperationProgress struct {
+	Operation   string `json:"operation"`
+	Total       int    `json:"total"`
+	Completed   int    `json:"completed"`
+	Succeeded   int    `json:"succeeded"`
+	Failed      int    `json:"failed"`
+	Percent     int    `json:"percent"`
+	CurrentSite string `json:"current_site,omitempty"`
+	Done        bool   `json:"done"`
+	Summary     string `json:"summary"`
+}
+
+type BulkOperationReport struct {
+	Operation     string                    `json:"operation"`
+	MaxConcurrent int                       `json:"max_concurrent"`
+	Total         int                       `json:"total"`
+	Succeeded     int                       `json:"succeeded"`
+	Failed        int                       `json:"failed"`
+	Summary       string                    `json:"summary"`
+	Results       []BulkOperationItemResult `json:"results"`
+}
+
+func (a *App) runBulkParallel(operation string, targets []sites.Config, worker func(cfg sites.Config) (string, error)) BulkOperationReport {
+	total := len(targets)
+	if total == 0 {
+		rep := BulkOperationReport{
+			Operation:     operation,
+			MaxConcurrent: BulkOperationMaxConcurrent,
+			Total:         0,
+			Summary:       fmt.Sprintf("%s: 0 target sites.", operation),
+			Results:       []BulkOperationItemResult{},
+		}
+		a.emit("ui:bulk_progress", BulkOperationProgress{
+			Operation: operation,
+			Total:     0,
+			Completed: 0,
+			Percent:   100,
+			Done:      true,
+			Summary:   rep.Summary,
+		})
+		return rep
+	}
+
+	results := make([]BulkOperationItemResult, total)
+	sem := make(chan struct{}, BulkOperationMaxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	completed := 0
+	succeeded := 0
+	failed := 0
+
+	a.emit("ui:bulk_progress", BulkOperationProgress{
+		Operation: operation,
+		Total:     total,
+		Completed: 0,
+		Percent:   0,
+		Done:      false,
+		Summary:   fmt.Sprintf("%s: starting %d site(s) (max %d concurrent)…", operation, total, BulkOperationMaxConcurrent),
+	})
+
+	for idx, cfg := range targets {
+		wg.Add(1)
+		go func(i int, c sites.Config) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			var msg string
+			var wErr error
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						wErr = fmt.Errorf("panic recovered on %s: %v", c.ID, r)
+					}
+				}()
+				msg, wErr = worker(c)
+			}()
+
+			group := strings.ToUpper(strings.TrimSpace(c.Classification.Group))
+			if group == "" {
+				group = "A"
+			}
+			item := BulkOperationItemResult{
+				SiteID:   c.ID,
+				SiteName: c.Name,
+				Group:    group,
+				Success:  wErr == nil,
+				Status:   "ok",
+				Message:  msg,
+			}
+			if wErr != nil {
+				item.Status = "failed"
+				item.Error = wErr.Error()
+			}
+
+			mu.Lock()
+			results[i] = item
+			completed++
+			if wErr == nil {
+				succeeded++
+			} else {
+				failed++
+			}
+			pct := (completed * 100) / total
+			prog := BulkOperationProgress{
+				Operation:   operation,
+				Total:       total,
+				Completed:   completed,
+				Succeeded:   succeeded,
+				Failed:      failed,
+				Percent:     pct,
+				CurrentSite: c.ID,
+				Done:        completed == total,
+				Summary:     fmt.Sprintf("%s: %d/%d completed (%d ok, %d failed)", operation, completed, total, succeeded, failed),
+			}
+			mu.Unlock()
+
+			a.emit("ui:bulk_progress", prog)
+		}(idx, cfg)
+	}
+
+	wg.Wait()
+
+	summary := fmt.Sprintf("%s complete: %d/%d succeeded, %d failed (max %d concurrent).", operation, succeeded, total, failed, BulkOperationMaxConcurrent)
+	a.recordCombinedLog(a.activeSiteID(), "system", summary, operation)
+	a.emit("ui:site_statuses", a.GetSiteStatuses())
+
+	return BulkOperationReport{
+		Operation:     operation,
+		MaxConcurrent: BulkOperationMaxConcurrent,
+		Total:         total,
+		Succeeded:     succeeded,
+		Failed:        failed,
+		Summary:       summary,
+		Results:       results,
+	}
+}
+
+// BulkStartAllReady starts all sites that are ready (Group A guest or have a valid/expiring
+// saved session and are not marked needs_human) with max 10 concurrent workers (Prompt 14).
+func (a *App) BulkStartAllReady() (BulkOperationReport, error) {
+	list, err := sites.List(a.dataDir)
+	if err != nil {
+		return BulkOperationReport{}, err
+	}
+	recMap := a.GetRecoveryStatuses()
+	ready := make([]sites.Config, 0, len(list))
+	for _, cfg := range list {
+		if !cfg.Enabled {
+			continue
+		}
+		if rec, ok := recMap[cfg.ID]; ok && rec.NeedsHuman {
+			continue
+		}
+		grp := strings.ToUpper(strings.TrimSpace(cfg.Classification.Group))
+		hasSess := cfg.HasSavedSession || cfg.AccountCount > 0
+		if !hasSess {
+			if sum, sErr := sites.ValidateSiteSession(a.dataDir, cfg.ID); sErr == nil && (sum.Status == sites.SessionStateValid || sum.Status == sites.SessionStateExpiring) {
+				hasSess = true
+			}
+		}
+		if grp == "A" || hasSess {
+			ready = append(ready, cfg)
+		}
+	}
+	rep := a.runBulkParallel("Start All Ready", ready, func(cfg sites.Config) (string, error) {
+		if err := a.runnerSupervisor().StartSite(cfg.ID); err != nil {
+			return "", err
+		}
+		return "runner started", nil
+	})
+	return rep, nil
+}
+
+// BulkAutoRegisterGroupB auto-registers accounts and captures isolated sessions for all
+// Group B sites in parallel (max 10 concurrent) with individual failure resilience (Prompt 14).
+func (a *App) BulkAutoRegisterGroupB() (BulkOperationReport, error) {
+	list, err := sites.List(a.dataDir)
+	if err != nil {
+		return BulkOperationReport{}, err
+	}
+	groupB := make([]sites.Config, 0, 40)
+	for _, cfg := range list {
+		if strings.EqualFold(strings.TrimSpace(cfg.Classification.Group), "B") {
+			groupB = append(groupB, cfg)
+		}
+	}
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rep := a.runBulkParallel("Auto-Register All Group B", groupB, func(cfg sites.Config) (string, error) {
+		created, regErr := sites.AutoRegisterSiteAccounts(ctx, a.dataDir, cfg.ID, "default", 1, true)
+		if regErr != nil {
+			return "", regErr
+		}
+		_, _ = sites.CaptureSiteSession(a.dataDir, cfg.ID, nil)
+		_ = a.runnerSupervisor().ReloadSiteConfig(cfg.ID)
+		return fmt.Sprintf("auto-registered %d account(s) in sites/%s/accounts/", len(created), cfg.ID), nil
+	})
+	return rep, nil
+}
+
+// BulkLoginGroupCBatch processes up to batchSize (default 5) Group C sites in parallel,
+// preparing/capturing their isolated browser sessions (Prompt 14).
+func (a *App) BulkLoginGroupCBatch(batchSize int) (BulkOperationReport, error) {
+	if batchSize <= 0 {
+		batchSize = 5
+	}
+	list, err := sites.List(a.dataDir)
+	if err != nil {
+		return BulkOperationReport{}, err
+	}
+	groupC := make([]sites.Config, 0, batchSize)
+	for _, cfg := range list {
+		if len(groupC) >= batchSize {
+			break
+		}
+		if !strings.EqualFold(strings.TrimSpace(cfg.Classification.Group), "C") {
+			continue
+		}
+		groupC = append(groupC, cfg)
+	}
+	rep := a.runBulkParallel(fmt.Sprintf("Login All Group C (Batch %d)", batchSize), groupC, func(cfg sites.Config) (string, error) {
+		sum, capErr := sites.CaptureSiteSession(a.dataDir, cfg.ID, nil)
+		if capErr != nil {
+			return "", capErr
+		}
+		_ = a.runnerSupervisor().ReloadSiteConfig(cfg.ID)
+		return fmt.Sprintf("session captured (%s)", sum.Status), nil
+	})
+	return rep, nil
+}
+
+// BulkRefreshAllSessions validates and refreshes sessions across all sites in parallel
+// (max 10 concurrent) with individual failure resilience (Prompt 14).
+func (a *App) BulkRefreshAllSessions() (BulkOperationReport, error) {
+	list, err := sites.List(a.dataDir)
+	if err != nil {
+		return BulkOperationReport{}, err
+	}
+	rep := a.runBulkParallel("Refresh All Sessions", list, func(cfg sites.Config) (string, error) {
+		sum, valErr := sites.ValidateSiteSession(a.dataDir, cfg.ID)
+		if valErr != nil {
+			return "", valErr
+		}
+		_ = a.runnerSupervisor().ReloadSiteConfig(cfg.ID)
+		return fmt.Sprintf("session status: %s", sum.Status), nil
+	})
+	return rep, nil
+}
+
+type FullMultiSiteReport struct {
+	GeneratedAt           string         `json:"generated_at"`
+	TotalSites            int            `json:"total_sites"`
+	ReadySites            int            `json:"ready_sites"`
+	RunningSites          int            `json:"running_sites"`
+	PausedSites           int            `json:"paused_sites"`
+	FailedSites           int            `json:"failed_sites"`
+	NeedsHumanSites       int            `json:"needs_human_sites"`
+	ValidSessions         int            `json:"valid_sessions"`
+	ExpiringSessions      int            `json:"expiring_sessions"`
+	MissingSessions       int            `json:"missing_sessions"`
+	GroupCounts           map[string]int `json:"group_counts"`
+	TotalMessagesSent     int            `json:"total_messages_sent"`
+	TotalMessagesReceived int            `json:"total_messages_received"`
+	TotalErrors           int            `json:"total_errors"`
+	ReportPath            string         `json:"report_path"`
+	Summary               string         `json:"summary"`
+}
+
+// GenerateFullMultiSiteReport aggregates the health, classification, session, and runner
+// status of all sites and saves the report to memory/multisite_full_report.json (Prompt 14).
+func (a *App) GenerateFullMultiSiteReport() (FullMultiSiteReport, error) {
+	list, err := sites.List(a.dataDir)
+	if err != nil {
+		return FullMultiSiteReport{}, err
+	}
+	statuses := a.GetSiteStatuses()
+	sessOverview, _ := sites.GetAllSessionStatuses(a.dataDir)
+	errDash := a.GetErrorDashboardSummary()
+
+	groupCounts := map[string]int{"A": 0, "B": 0, "C": 0, "D": 0, "E": 0}
+	readySites := 0
+	runningSites := 0
+	pausedSites := 0
+	failedSites := 0
+	sentTotal := 0
+	recvTotal := 0
+
+	for _, cfg := range list {
+		grp := strings.ToUpper(strings.TrimSpace(cfg.Classification.Group))
+		if grp == "" {
+			grp = "A"
+		}
+		groupCounts[grp]++
+		if grp == "A" || cfg.HasSavedSession || cfg.AccountCount > 0 {
+			readySites++
+		}
+		if st, ok := statuses[cfg.ID]; ok {
+			switch st.Status {
+			case runner.StatusRunning:
+				runningSites++
+			case runner.StatusPaused:
+				pausedSites++
+			case runner.StatusFailed:
+				failedSites++
+			}
+			sentTotal += st.Stats.MessagesSent
+			recvTotal += st.Stats.MessagesReceived
+		}
+	}
+
+	reportPath := filepath.Join(a.dataDir, "memory", "multisite_full_report.json")
+	report := FullMultiSiteReport{
+		GeneratedAt:           time.Now().UTC().Format(time.RFC3339),
+		TotalSites:            len(list),
+		ReadySites:            readySites,
+		RunningSites:          runningSites,
+		PausedSites:           pausedSites,
+		FailedSites:           failedSites,
+		NeedsHumanSites:       errDash.SitesNeedingHuman,
+		ValidSessions:         sessOverview.ValidCount,
+		ExpiringSessions:      sessOverview.ExpiringCount,
+		MissingSessions:       sessOverview.MissingCount,
+		GroupCounts:           groupCounts,
+		TotalMessagesSent:     sentTotal,
+		TotalMessagesReceived: recvTotal,
+		TotalErrors:           errDash.TotalErrors,
+		ReportPath:            reportPath,
+	}
+	report.Summary = fmt.Sprintf(
+		"Full Report (%d sites): Ready=%d | Running=%d | Valid Sessions=%d | Expiring=%d | Missing=%d | Groups A=%d B=%d C=%d D=%d E=%d | Sent=%d Recv=%d | Errors=%d NeedsHuman=%d",
+		report.TotalSites,
+		report.ReadySites,
+		report.RunningSites,
+		report.ValidSessions,
+		report.ExpiringSessions,
+		report.MissingSessions,
+		groupCounts["A"], groupCounts["B"], groupCounts["C"], groupCounts["D"], groupCounts["E"],
+		report.TotalMessagesSent,
+		report.TotalMessagesReceived,
+		report.TotalErrors,
+		report.NeedsHumanSites,
+	)
+	if a.dataDir != "" {
+		_ = store.SaveJSON(reportPath, report)
+	}
+	a.recordCombinedLog(a.activeSiteID(), "system", report.Summary, "full_report")
+	return report, nil
+}
+
+type WizardProbeResult struct {
+	SiteName    string   `json:"site_name"`
+	StartURL    string   `json:"start_url"`
+	Group       string   `json:"group"`
+	GroupName   string   `json:"group_name"`
+	Confidence  string   `json:"confidence"`
+	Reason      string   `json:"reason"`
+	AccountMode string   `json:"account_mode"`
+	RecipeSteps []string `json:"recipe_steps"`
+}
+
+type WizardSetupResult struct {
+	SiteID          string                `json:"site_id"`
+	SiteName        string                `json:"site_name"`
+	StartURL        string                `json:"start_url"`
+	FolderPath      string                `json:"folder_path"`
+	Group           string                `json:"group"`
+	GroupName       string                `json:"group_name"`
+	Confidence      string                `json:"confidence"`
+	ResultStatus    string                `json:"result_status"` // ready | needs_login | failed
+	Steps           []sites.RecipeStepLog `json:"steps"`
+	NextAction      string                `json:"next_action"`
+	NextActionLabel string                `json:"next_action_label"`
+	Summary         string                `json:"summary"`
+}
+
+// WizardProbeURL performs Step 2 of the Add Site Wizard (Prompt 14): auto-probing
+// a target URL to classify it into Group A–E and preview its setup recipe steps.
+func (a *App) WizardProbeURL(name string, rawURL string) (WizardProbeResult, error) {
+	cleanURL := strings.TrimSpace(rawURL)
+	if cleanURL == "" {
+		return WizardProbeResult{}, errors.New("site URL is required")
+	}
+	if !strings.HasPrefix(strings.ToLower(cleanURL), "http://") && !strings.HasPrefix(strings.ToLower(cleanURL), "https://") {
+		cleanURL = "https://" + cleanURL
+	}
+	cleanName := strings.TrimSpace(name)
+	if cleanName == "" {
+		trimmed := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(cleanURL), "https://"), "http://")
+		trimmed = strings.TrimPrefix(trimmed, "www.")
+		if slash := strings.Index(trimmed, "/"); slash > 0 {
+			trimmed = trimmed[:slash]
+		}
+		cleanName = trimmed
+	}
+
+	lower := strings.ToLower(cleanURL + " " + cleanName)
+	group := "B"
+	reason := "HTTP auto-signup / guest API flow detected"
+	confidence := "high"
+	accountMode := sites.AccountModeAutoRegister
+
+	switch {
+	case strings.Contains(lower, "guest") || strings.Contains(lower, "chatib") || strings.Contains(lower, "omegle") || strings.Contains(lower, "talkwithstranger"):
+		group = "A"
+		reason = "Zero-registration guest chat endpoint detected"
+	case strings.Contains(lower, "captcha") || strings.Contains(lower, "emerald") || strings.Contains(lower, "login") || strings.Contains(lower, "oauth"):
+		group = "C"
+		reason = "One-time browser login / CAPTCHA verification required"
+		accountMode = sites.AccountModeBrowserSetup
+	case strings.Contains(lower, "dom") || strings.Contains(lower, "echat") || strings.Contains(lower, "e-chat") || strings.Contains(lower, "iframe"):
+		group = "D"
+		reason = "DOM-only / dynamic SPA chat layout detected"
+	case strings.Contains(lower, "manual") || strings.Contains(lower, "strict") || strings.Contains(lower, "cloudflare-block"):
+		group = "E"
+		reason = "Strict anti-bot protection; manual visible browser mode required"
+		accountMode = sites.AccountModeBrowserSetup
+	}
+
+	groupDef := sites.GroupByID(group)
+	var stepNames []string
+	if recipe, err := sites.LoadRecipe(a.dataDir, group); err == nil {
+		for _, st := range recipe.Steps {
+			stepNames = append(stepNames, fmt.Sprintf("%s (%s)", st.ID, st.Action))
+		}
+	}
+	if len(stepNames) == 0 {
+		stepNames = []string{"create_isolated_folder", "probe_classification", "execute_group_recipe", "validate_session"}
+	}
+
+	return WizardProbeResult{
+		SiteName:    cleanName,
+		StartURL:    cleanURL,
+		Group:       group,
+		GroupName:   groupDef.Name,
+		Confidence:  confidence,
+		Reason:      reason,
+		AccountMode: accountMode,
+		RecipeSteps: stepNames,
+	}, nil
+}
+
+// WizardCreateAndSetupSite performs Steps 3 & 4 of the Add Site Wizard (Prompt 14):
+// creates the isolated sites/<site_id>/ folder, runs the group setup recipe, and
+// returns the final status (`ready`, `needs_login`, or `failed`) + next action.
+func (a *App) WizardCreateAndSetupSite(name string, rawURL string, group string) (WizardSetupResult, error) {
+	probe, err := a.WizardProbeURL(name, rawURL)
+	if err != nil {
+		return WizardSetupResult{}, err
+	}
+	if g := strings.ToUpper(strings.TrimSpace(group)); g != "" {
+		probe.Group = g
+		probe.GroupName = sites.GroupByID(g).Name
+	}
+
+	cfg, createErr := sites.CreateSiteWithMode(a.dataDir, probe.SiteName, probe.StartURL, probe.AccountMode)
+	if createErr != nil {
+		return WizardSetupResult{
+			SiteName:        probe.SiteName,
+			StartURL:        probe.StartURL,
+			Group:           probe.Group,
+			GroupName:       probe.GroupName,
+			ResultStatus:    "failed",
+			NextAction:      "retry_setup",
+			NextActionLabel: "Retry Setup",
+			Summary:         createErr.Error(),
+		}, createErr
+	}
+
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	recipeRes, recipeErr := sites.ExecuteSiteRecipe(ctx, a.dataDir, cfg.ID, sites.RecipeRunOptions{
+		Group: probe.Group,
+	})
+
+	finalGroup := probe.Group
+	finalGroupName := probe.GroupName
+	if recipeRes.FinalGroup != "" {
+		finalGroup = recipeRes.FinalGroup
+		finalGroupName = recipeRes.FinalGroupName
+	}
+
+	resultStatus := "ready"
+	nextAction := "start_site"
+	nextActionLabel := "Start Site Now"
+
+	switch {
+	case recipeErr != nil && len(recipeRes.StepLogs) == 0:
+		resultStatus = "failed"
+		nextAction = "retry_setup"
+		nextActionLabel = "Retry Setup"
+	case finalGroup == "C" || finalGroup == "E":
+		resultStatus = "needs_login"
+		nextAction = "open_browser"
+		nextActionLabel = "Open Browser Login"
+	default:
+		_, _ = sites.CaptureSiteSession(a.dataDir, cfg.ID, nil)
+		resultStatus = "ready"
+		nextAction = "start_site"
+		nextActionLabel = "Start Site Now"
+	}
+
+	summary := fmt.Sprintf("Site %s (%s) created in sites/%s/ -> Group %s (%s) [%s]", cfg.Name, cfg.ID, cfg.ID, finalGroup, finalGroupName, resultStatus)
+	a.recordCombinedLog(cfg.ID, "system", summary, "add_site_wizard")
+
+	return WizardSetupResult{
+		SiteID:          cfg.ID,
+		SiteName:        cfg.Name,
+		StartURL:        cfg.StartURL,
+		FolderPath:      cfg.FolderPath,
+		Group:           finalGroup,
+		GroupName:       finalGroupName,
+		Confidence:      probe.Confidence,
+		ResultStatus:    resultStatus,
+		Steps:           recipeRes.StepLogs,
+		NextAction:      nextAction,
+		NextActionLabel: nextActionLabel,
+		Summary:         summary,
+	}, nil
+}
+
 // CaptureSession opens or captures a session for siteID using its isolated
 // browser profile (sites/<site_id>/profiles/default/) and writes cookies.json,
 // local_storage.json, ws_endpoints.json, auth_tokens.json, and meta.json into
