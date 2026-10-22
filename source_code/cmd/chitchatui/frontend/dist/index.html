@@ -17,27 +17,78 @@
         </div>
       </div>
 
+      <div id="control-center-sidebar-nav" class="dash-sidebar-section active" data-dash-sidebar="control-center">
+        <div class="dash-sidebar-label">Operation Mode</div>
+        <nav class="nav" aria-label="Main modes">
+          <button class="nav-button active" data-tab="show">&#128421; Show Mode</button>
+          <button class="nav-button" data-tab="bot">&#129302; Background Bot</button>
+        </nav>
+
+        <div class="dash-sidebar-label" style="margin-top: 10px;">Configuration Sections</div>
+        <nav class="subnav" id="subnav-show" aria-label="Show Mode sections">
+          <button class="subnav-button active" data-subpanel="show-setting">1 · Setting</button>
+          <button class="subnav-button" data-subpanel="show-proxy">2 · Proxy</button>
+          <button class="subnav-button" data-subpanel="show-message">3 · Message</button>
+          <button class="subnav-button" data-subpanel="show-run">4 · Run Browser</button>
+          <button class="subnav-button" data-subpanel="show-logs">5 · Live Logs</button>
+        </nav>
+
+        <nav class="subnav" id="subnav-bot" aria-label="Background Bot sections" hidden>
+          <button class="subnav-button active" data-subpanel="bg-login">1 · Login Capture</button>
+          <button class="subnav-button" data-subpanel="bg-proxy">2 · Proxy</button>
+          <button class="subnav-button" data-subpanel="bg-message">3 · Message</button>
+          <button class="subnav-button" data-subpanel="bg-settings">4 · Bot Settings</button>
+          <button class="subnav-button" data-subpanel="bg-logs">5 · Live Logs</button>
+        </nav>
+      </div>
+
+      <div id="site-manager-sidebar-nav" class="dash-sidebar-section" data-dash-sidebar="site-manager" hidden>
+        <div class="dash-sidebar-label">Site Manager Groups (A–E)</div>
+        <div class="dash-sidebar-hint">Manage all 102 isolated site folders by classification group (Group A–E), start/stop individual sites, or configure per-site overrides.</div>
+      </div>
+
+      <div id="sessions-sidebar-nav" class="dash-sidebar-section" data-dash-sidebar="sessions" hidden>
+        <div class="dash-sidebar-label">Session Store &amp; Health</div>
+        <div class="dash-sidebar-hint">Capture browser/guest sessions into <code>sites/&lt;site_id&gt;/sessions/default/</code> and monitor validity across all 102 sites.</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="status-row">
+          <span class="status-label">Workers Status</span>
+          <span id="running-pill" class="pill stopped">Stopped</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
       <div class="site-selector-box" aria-label="Target Site">
-        <div class="site-box-head">
-          <span class="status-label">Target Site (100+)</span>
-          <div class="site-box-btns">
-            <button type="button" id="site-toggle-new" class="site-mini-btn" title="Add a new isolated site">+ New</button>
-            <button type="button" id="site-run-debug" class="site-mini-btn" title="Run 6-step deep diagnostics for active site">Debug</button>
-            <button type="button" id="site-open-folder" class="site-mini-btn" title="Open active site folder">Folder</button>
+        <div class="site-box-top-row">
+          <div class="site-box-head">
+            <span class="status-label site-bar-title">Target Site (102)</span>
+            <div class="site-mode-filters" role="group" aria-label="Filter sites by account setup mode">
+              <button type="button" id="site-filter-all" class="site-filter-pill active" data-site-filter="all">All</button>
+              <button type="button" id="site-filter-saved" class="site-filter-pill" data-site-filter="saved_session">&#10003; Saved</button>
+              <button type="button" id="site-filter-autoreg" class="site-filter-pill" data-site-filter="auto_register">&#9889; Auto-Reg</button>
+              <button type="button" id="site-filter-browser" class="site-filter-pill" data-site-filter="browser_setup">&#127760; Browser Acc</button>
+            </div>
+          </div>
+          <div class="site-box-controls">
+            <input type="text" id="site-search-input" placeholder="Search 102 sites (e.g. omezy, chatib)..." autocomplete="off" aria-label="Search target sites">
+            <select id="active-site-select" aria-label="Select target site">
+              <option value="chitchat">ChitChat.gg</option>
+            </select>
+            <div class="site-box-btns">
+              <button type="button" id="site-toggle-new" class="site-mini-btn" title="Add a new isolated site">+ New Site</button>
+              <button type="button" id="site-run-debug" class="site-mini-btn" title="Run 6-step deep diagnostics for active site">Debug</button>
+              <button type="button" id="site-open-folder" class="site-mini-btn" title="Open active site folder">Open Folder</button>
+            </div>
           </div>
         </div>
-        <div class="site-mode-filters" role="group" aria-label="Filter sites by account setup mode">
-          <button type="button" id="site-filter-all" class="site-filter-pill active" data-site-filter="all">All</button>
-          <button type="button" id="site-filter-saved" class="site-filter-pill" data-site-filter="saved_session">&#10003; Saved</button>
-          <button type="button" id="site-filter-autoreg" class="site-filter-pill" data-site-filter="auto_register">&#9889; Auto-Reg</button>
-          <button type="button" id="site-filter-browser" class="site-filter-pill" data-site-filter="browser_setup">&#127760; Browser Acc</button>
+        <div class="site-box-meta-row">
+          <div id="active-site-mode-badge" class="site-mode-badge" aria-live="polite">&#127760; Browser Account Setup · 0 saved in sites/chitchat/accounts/</div>
+          <p id="active-site-status" class="hint-text site-hint">sites/chitchat</p>
         </div>
-        <input type="text" id="site-search-input" placeholder="Search 100+ sites (e.g. omezy, chatib)..." autocomplete="off" aria-label="Search target sites">
-        <select id="active-site-select" aria-label="Select target site">
-          <option value="chitchat">ChitChat.gg</option>
-        </select>
-        <div id="active-site-mode-badge" class="site-mode-badge" aria-live="polite">&#127760; Browser Account Setup · 0 saved in sites/chitchat/accounts/</div>
-        <div id="site-quick-list" class="site-quick-list" aria-label="Per-site browser and bot list"></div>
+        <div id="site-quick-list" class="site-quick-list" aria-label="Per-site browser and bot list" hidden></div>
         <div id="site-new-form" class="site-new-form" hidden>
           <input type="text" id="site-new-name" placeholder="Site Name (e.g. Uhmegle)" autocomplete="off">
           <input type="text" id="site-new-url" placeholder="https://example.com/chat" autocomplete="off">
@@ -47,7 +98,6 @@
           </select>
           <button type="button" id="site-create-submit" class="primary-button site-create-btn">Create Site Folder</button>
         </div>
-        <p id="active-site-status" class="hint-text site-hint">sites/chitchat</p>
         <div id="site-debug-box" class="site-debug-box" hidden aria-live="polite">
           <div id="site-debug-summary" class="site-debug-summary"></div>
           <div id="site-debug-checks" class="site-debug-checks"></div>
@@ -68,50 +118,6 @@
           <span class="dash-tab-desc">Session capture · Health monitor</span>
         </button>
       </nav>
-
-      <div id="control-center-sidebar-nav" class="dash-sidebar-section active" data-dash-sidebar="control-center">
-        <div class="dash-sidebar-label">Control Center Modes</div>
-        <nav class="nav" aria-label="Main modes">
-          <button class="nav-button active" data-tab="show">Show Mode</button>
-          <button class="nav-button" data-tab="bot">Background Bot</button>
-        </nav>
-
-        <nav class="subnav" id="subnav-show" aria-label="Show Mode sections">
-          <button class="subnav-button active" data-subpanel="show-setting">Setting</button>
-          <button class="subnav-button" data-subpanel="show-proxy">Proxy</button>
-          <button class="subnav-button" data-subpanel="show-message">Message</button>
-          <button class="subnav-button" data-subpanel="show-run">Run Browser</button>
-          <button class="subnav-button" data-subpanel="show-logs">Live Logs</button>
-        </nav>
-
-        <nav class="subnav" id="subnav-bot" aria-label="Background Bot sections" hidden>
-          <button class="subnav-button active" data-subpanel="bg-login">Login Capture</button>
-          <button class="subnav-button" data-subpanel="bg-proxy">Proxy</button>
-          <button class="subnav-button" data-subpanel="bg-message">Message</button>
-          <button class="subnav-button" data-subpanel="bg-settings">Bot Settings</button>
-          <button class="subnav-button" data-subpanel="bg-logs">Live Logs</button>
-        </nav>
-      </div>
-
-      <div id="site-manager-sidebar-nav" class="dash-sidebar-section" data-dash-sidebar="site-manager" hidden>
-        <div class="dash-sidebar-label">Site Manager Groups (A–E)</div>
-        <div class="dash-sidebar-hint">Filter 102 isolated site folders by classification group or inspect per-site setup recipes and overrides.</div>
-      </div>
-
-      <div id="sessions-sidebar-nav" class="dash-sidebar-section" data-dash-sidebar="sessions" hidden>
-        <div class="dash-sidebar-label">Session Store &amp; Health</div>
-        <div class="dash-sidebar-hint">Capture browser/guest sessions into <code>sites/&lt;site_id&gt;/sessions/</code> and monitor health across all sites.</div>
-      </div>
-
-      <div class="sidebar-footer">
-        <div class="status-row">
-          <span class="status-label">Workers</span>
-          <span id="running-pill" class="pill stopped">Stopped</span>
-        </div>
-      </div>
-    </aside>
-
-    <main class="main">
       <!-- ======================= TAB 1: CONTROL CENTER ======================= -->
       <div id="dash-panel-control-center" class="dash-tab-panel active" role="tabpanel" aria-labelledby="dash-tab-control-center" data-dash-panel="control-center">
         <section class="card cc-overview-bar" id="cc-overview-bar" aria-label="Control Center Global Controls">
