@@ -131,6 +131,66 @@
           </div>
         </section>
 
+        <section class="card cc-error-dashboard" id="cc-error-dashboard" aria-label="Control Center Error Summary and Recovery Status">
+          <div class="account-card-head">
+            <div>
+              <h2>Error Summary &amp; Self-Recovery Dashboard</h2>
+              <p class="hint-text">Per-site error counts, error type breakdown (<code>connection</code> / <code>auth</code> / <code>ban</code> / <code>captcha</code> / <code>timeout</code>), sites needing attention, and live recovery status.</p>
+            </div>
+            <div class="actions">
+              <span id="cc-error-summary-pill" class="mode-badge">0 Errors · 0 Needs Attention</span>
+              <button type="button" id="cc-error-refresh-btn" class="secondary-button">Refresh Errors</button>
+            </div>
+          </div>
+
+          <div class="home-stats cc-error-breakdown-grid" id="cc-error-breakdown-grid" aria-label="Error type breakdown and recovery counts">
+            <div class="stat-capsule">
+              <span>Total Errors</span>
+              <strong id="cc-err-total">0</strong>
+            </div>
+            <div class="stat-capsule">
+              <span>Connection</span>
+              <strong id="cc-err-type-connection">0</strong>
+            </div>
+            <div class="stat-capsule">
+              <span>Auth</span>
+              <strong id="cc-err-type-auth">0</strong>
+            </div>
+            <div class="stat-capsule danger">
+              <span>Ban</span>
+              <strong id="cc-err-type-ban">0</strong>
+            </div>
+            <div class="stat-capsule">
+              <span>CAPTCHA</span>
+              <strong id="cc-err-type-captcha">0</strong>
+            </div>
+            <div class="stat-capsule">
+              <span>Timeout</span>
+              <strong id="cc-err-type-timeout">0</strong>
+            </div>
+            <div class="stat-capsule">
+              <span>Recovering</span>
+              <strong id="cc-rec-recovering">0</strong>
+            </div>
+            <div class="stat-capsule danger">
+              <span>Needs Human</span>
+              <strong id="cc-rec-needs-human">0</strong>
+            </div>
+            <div class="stat-capsule">
+              <span>Recovered</span>
+              <strong id="cc-rec-recovered">0</strong>
+            </div>
+          </div>
+
+          <div class="cc-attention-wrap">
+            <div class="account-card-head">
+              <h3>Sites Needing Attention &amp; Per-Site Error / Recovery Status</h3>
+            </div>
+            <div id="cc-attention-list" class="cc-attention-list" aria-live="polite"></div>
+            <p id="cc-attention-empty" class="hint-text">All sites healthy — 0 active errors or attention items.</p>
+          </div>
+        </section>
+
       <!-- ============================ SHOW MODE ============================ -->
       <section class="tab-panel active" data-panel="show">
         <header class="panel-header">
@@ -1001,6 +1061,43 @@
           <div id="sess-health-list" class="site-session-table" aria-live="polite"></div>
         </section>
       </div>
+
+      <!-- ============== COMBINED LIVE LOG BOTTOM BAR (VISIBLE ALL TABS) ============== -->
+      <section class="card combined-live-log-bar" id="combined-live-log-bar" aria-label="Combined Multi-Site Live Log Feed">
+        <div class="combined-log-header">
+          <div class="combined-log-title-wrap">
+            <h2>Combined Live Log</h2>
+            <span id="combined-log-count-badge" class="mode-badge">0 / 500 lines</span>
+          </div>
+          <div class="combined-log-tools">
+            <select id="combined-log-filter-site" aria-label="Filter combined log by site">
+              <option value="all">Site: All Sites</option>
+            </select>
+            <select id="combined-log-filter-type" aria-label="Filter combined log by type">
+              <option value="all">Type: All (OUT/IN/ERR/SYS)</option>
+              <option value="OUT">OUT</option>
+              <option value="IN">IN</option>
+              <option value="ERR">ERR</option>
+              <option value="SYS">SYS</option>
+            </select>
+            <select id="combined-log-filter-group" aria-label="Filter combined log by group">
+              <option value="all">Group: All (A–E)</option>
+              <option value="A">Group A</option>
+              <option value="B">Group B</option>
+              <option value="C">Group C</option>
+              <option value="D">Group D</option>
+              <option value="E">Group E</option>
+            </select>
+            <label class="combined-log-autoscroll-label">
+              <input type="checkbox" id="combined-log-autoscroll" checked>
+              <span>Auto-scroll</span>
+            </label>
+            <button type="button" id="combined-log-clear" class="secondary-button">Clear</button>
+          </div>
+        </div>
+        <div id="combined-log-list" class="combined-log-list" aria-live="polite"></div>
+        <p id="combined-log-empty" class="hint-text">No multi-site log entries yet. Start sites or run chat to view live OUT/IN/ERR/SYS events.</p>
+      </section>
     </main>
   </div>
 

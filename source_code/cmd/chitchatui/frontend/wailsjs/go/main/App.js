@@ -309,3 +309,16 @@ export function TestAPIChat(arg1) {
 export function TestProxyEntries(arg1) {
   return window['go']['main']['App']['TestProxyEntries'](arg1);
 }
+
+export function GetCombinedLiveLog(arg1) {
+  return window['go']['main']['App']['GetCombinedLiveLog'](arg1);
+}
+
+export function ClearCombinedLiveLog() {
+  return window['go']['main']['App']['ClearCombinedLiveLog']();
+}
+
+export function GetErrorDashboardSummary() {
+  return window['go']['main']['App']['GetErrorDashboardSummary']();
+}
+

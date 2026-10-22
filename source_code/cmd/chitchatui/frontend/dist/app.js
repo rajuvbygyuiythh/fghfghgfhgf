@@ -32,6 +32,8 @@ const state = {
   activeSub: { show: "show-setting", bot: "bg-login" },
   showLog: { after: 0, entries: [], pending: false },
   botLog: { after: 0, entries: [], pending: false },
+  combinedLog: { after: 0, entries: [], pending: false, seenKeys: {} },
+  errorSummary: null,
 };
 
 // Global form store: every field is bound by id, so switching sub-pages never
@@ -1724,6 +1726,7 @@ async function refreshSiteStatuses() {
     }
     if (state.dashTab === "site-manager") renderSiteManager();
     if (state.dashTab === "sessions") renderSessionsTab();
+    await refreshErrorDashboard();
   } catch (_) { /* optional in mock tests */ }
 }
 
@@ -2098,8 +2101,11 @@ function fillForms(snapshot) {
 async function refreshState() {
   const snapshot = await invoke("GetInitialState");
   fillForms(snapshot);
+  syncCombinedLogSiteFilterOptions();
   await refreshProfiles();
   await refreshShowLog();
+  await refreshCombinedLiveLog();
+  await refreshErrorDashboard();
 }
 
 async function refreshStatsOnly() {
@@ -2197,6 +2203,7 @@ async function refreshBotLog() {
         state.botLog.entries.splice(0, state.botLog.entries.length - 600);
       }
       renderBotLog();
+      appendCombinedLogEntries(snapshot.entries, "bot");
     }
   } catch (_) { /* retry next tick */ }
   finally { state.botLog.pending = false; }
@@ -2226,6 +2233,7 @@ async function refreshShowLog() {
         state.showLog.entries.splice(0, state.showLog.entries.length - 600);
       }
       renderShowLog();
+      appendCombinedLogEntries(snapshot.entries, "show");
     }
   } catch (_) { /* retry next tick */ }
   finally { state.showLog.pending = false; }
@@ -2240,6 +2248,375 @@ async function clearShowLog() {
   } catch (error) {
     setStatus("sm-run-status", error.message || String(error), "error");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Prompt 13: Combined Live Log (All Tabs) + Control Center Error Dashboard
+// ---------------------------------------------------------------------------
+const COMBINED_LOG_MAX_LINES = 500;
+
+function normalizeCombinedLogType(raw) {
+  const val = String(raw || "").trim().toLowerCase();
+  if (val === "out" || val === "send" || val === "sent") return "OUT";
+  if (val === "in" || val === "recv" || val === "receive" || val === "received") return "IN";
+  if (val === "err" || val === "error" || val === "fail" || val === "failed" || val === "ban" || val === "banned") return "ERR";
+  return "SYS";
+}
+
+function resolveCombinedSiteMeta(siteId, fallbackName, fallbackGroup) {
+  const id = String(siteId || value("active-site-select") || state.snapshot?.active_site || "chitchat").trim();
+  const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+  const siteObj = sitesList.find((s) => s.id === id);
+  const st = state.siteStatuses?.[id];
+  const name = String(fallbackName || siteObj?.name || st?.site_name || id).trim();
+  const group = String(fallbackGroup || siteObj?.group || st?.group || "A").trim().toUpperCase() || "A";
+  return { site_id: id, site_name: name, group: ["A", "B", "C", "D", "E"].includes(group) ? group : "A" };
+}
+
+function syncCombinedLogSiteFilterOptions() {
+  const select = byId("combined-log-filter-site");
+  if (!select) return;
+  const current = select.value || "all";
+  const siteMap = new Map();
+  const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+  for (const s of sitesList) {
+    if (s && s.id) siteMap.set(s.id, s.name || s.id);
+  }
+  for (const entry of state.combinedLog.entries) {
+    if (entry.site_id && !siteMap.has(entry.site_id)) {
+      siteMap.set(entry.site_id, entry.site_name || entry.site_id);
+    }
+  }
+  const frag = document.createDocumentFragment();
+  const allOpt = document.createElement("option");
+  allOpt.value = "all";
+  allOpt.textContent = "Site: All Sites";
+  frag.appendChild(allOpt);
+  for (const [id, name] of siteMap.entries()) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = `${name} (${id})`;
+    frag.appendChild(opt);
+  }
+  select.replaceChildren(frag);
+  if (current === "all" || siteMap.has(current)) {
+    select.value = current;
+  } else {
+    select.value = "all";
+  }
+}
+
+function appendCombinedLogEntries(rawEntries, sourceTag = "combined") {
+  if (!Array.isArray(rawEntries) || !rawEntries.length) return;
+  let added = false;
+  for (const raw of rawEntries) {
+    if (!raw) continue;
+    const meta = resolveCombinedSiteMeta(raw.site_id || raw.siteId, raw.site_name || raw.siteName, raw.group);
+    const type = normalizeCombinedLogType(raw.type || raw.kind || raw.level);
+    const msg = String(raw.message || raw.text || "").trim();
+    if (!msg) continue;
+    const detail = String(raw.detail || raw.rule || "").trim();
+    const time = String(raw.time || "12:00:00").trim();
+    const dedupKey = raw.seq
+      ? `${sourceTag}:${raw.seq}:${meta.site_id}:${type}:${msg}`
+      : `${time}:${meta.site_id}:${type}:${msg}:${detail}`;
+    if (raw.seq && state.combinedLog.seenKeys[dedupKey]) continue;
+    if (raw.seq) state.combinedLog.seenKeys[dedupKey] = true;
+
+    state.combinedLog.entries.push({
+      seq: raw.seq || 0,
+      time,
+      site_id: meta.site_id,
+      site_name: meta.site_name,
+      group: meta.group,
+      type,
+      message: msg,
+      detail,
+    });
+    added = true;
+  }
+  if (state.combinedLog.entries.length > COMBINED_LOG_MAX_LINES) {
+    const excess = state.combinedLog.entries.length - COMBINED_LOG_MAX_LINES;
+    state.combinedLog.entries.splice(0, excess);
+  }
+  if (added) {
+    syncCombinedLogSiteFilterOptions();
+    renderCombinedLiveLog();
+  }
+}
+
+function renderCombinedLiveLog() {
+  const list = byId("combined-log-list");
+  const empty = byId("combined-log-empty");
+  const badge = byId("combined-log-count-badge");
+  if (!list) return;
+
+  const siteFilter = byId("combined-log-filter-site")?.value || "all";
+  const typeFilter = byId("combined-log-filter-type")?.value || "all";
+  const groupFilter = byId("combined-log-filter-group")?.value || "all";
+  const autoScroll = byId("combined-log-autoscroll") ? !!byId("combined-log-autoscroll").checked : true;
+
+  const fragment = document.createDocumentFragment();
+  let shown = 0;
+
+  for (const entry of state.combinedLog.entries) {
+    if (siteFilter !== "all" && entry.site_id !== siteFilter) continue;
+    if (typeFilter !== "all" && entry.type !== typeFilter) continue;
+    if (groupFilter !== "all" && entry.group !== groupFilter) continue;
+    shown += 1;
+
+    const row = document.createElement("div");
+    row.className = `combined-log-row combined-log-${entry.type.toLowerCase()}`;
+    row.dataset.siteId = entry.site_id;
+    row.dataset.group = entry.group;
+    row.dataset.type = entry.type;
+
+    const timeEl = document.createElement("span");
+    timeEl.className = "combined-log-time";
+    timeEl.textContent = entry.time;
+
+    const siteEl = document.createElement("span");
+    siteEl.className = `combined-log-site group-color-${entry.group}`;
+    siteEl.dataset.group = entry.group;
+    siteEl.dataset.siteId = entry.site_id;
+    siteEl.textContent = `[Group ${entry.group} · ${entry.site_name}]`;
+
+    const typeEl = document.createElement("span");
+    typeEl.className = `combined-log-type type-${entry.type}`;
+    typeEl.textContent = entry.type;
+
+    const msgEl = document.createElement("span");
+    msgEl.className = "combined-log-msg";
+    msgEl.textContent = entry.detail ? `${entry.message} · ${entry.detail}` : entry.message;
+
+    row.append(timeEl, siteEl, typeEl, msgEl);
+    fragment.appendChild(row);
+  }
+
+  list.replaceChildren(fragment);
+  if (empty) empty.hidden = shown > 0;
+  if (badge) {
+    badge.textContent = `${shown} / ${COMBINED_LOG_MAX_LINES} lines`;
+  }
+  if (autoScroll) {
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+async function refreshCombinedLiveLog() {
+  if (!backend() || typeof backend().GetCombinedLiveLog !== "function") return;
+  if (state.combinedLog.pending) return;
+  state.combinedLog.pending = true;
+  try {
+    const snapshot = await invoke("GetCombinedLiveLog", state.combinedLog.after);
+    if (snapshot && Array.isArray(snapshot.entries) && snapshot.entries.length) {
+      state.combinedLog.after = snapshot.version || state.combinedLog.after;
+      appendCombinedLogEntries(snapshot.entries, "combined");
+    }
+  } catch (_) { /* optional in mock tests */ }
+  finally { state.combinedLog.pending = false; }
+}
+
+async function clearCombinedLiveLog() {
+  try {
+    if (backend() && typeof backend().ClearCombinedLiveLog === "function") {
+      await invoke("ClearCombinedLiveLog");
+    }
+  } catch (_) { /* ignore */ }
+  state.combinedLog.entries = [];
+  state.combinedLog.seenKeys = {};
+  state.combinedLog.after = 0;
+  renderCombinedLiveLog();
+}
+
+function classifyFrontendErrorCategory(errType, errMsg, captchaDetected) {
+  if (captchaDetected) return "captcha";
+  const combined = `${errType || ""} ${errMsg || ""}`.toLowerCase();
+  if (combined.includes("captcha") || combined.includes("cloudflare") || combined.includes("turnstile")) return "captcha";
+  if (combined.includes("ban") || combined.includes("suspend") || combined.includes("block")) return "ban";
+  if (combined.includes("auth") || combined.includes("login") || combined.includes("session") || combined.includes("401") || combined.includes("403") || combined.includes("signup")) return "auth";
+  if (combined.includes("timeout") || combined.includes("deadline") || combined.includes("timed out")) return "timeout";
+  return "connection";
+}
+
+function computeFallbackErrorSummary() {
+  const breakdown = { connection: 0, auth: 0, ban: 0, captcha: 0, timeout: 0 };
+  const attention = [];
+  let totalErrors = 0;
+  let sitesWithErrors = 0;
+  let sitesNeedingHuman = 0;
+  let recoveringSites = 0;
+  let recoveredSites = 0;
+
+  const siteIds = new Set([
+    ...Object.keys(state.siteStatuses || {}),
+    ...Object.keys(state.recoveryStatuses || {}),
+  ]);
+
+  for (const id of Array.from(siteIds).sort()) {
+    const st = state.siteStatuses?.[id] || {};
+    const rec = state.recoveryStatuses?.[id] || {};
+    const errCount = Number(st.total_errors ?? st.error_count ?? st.consecutive_errors ?? 0);
+    const needsHuman = Boolean(st.needs_human || rec.needs_human || st.status === "needs_human" || rec.status === "needs_human");
+    const recStatus = rec.status || st.recovery_status || "";
+    const recAttempts = Number(rec.attempts ?? st.recovery_attempts ?? 0);
+    const recScenario = rec.scenario || st.last_recovery_scenario || "";
+    const recMsg = rec.message || st.last_recovery_message || "";
+    const lastErr = st.last_error || "";
+    const lastErrType = st.last_error_type || rec.error_type || "";
+
+    if (recStatus === "recovering") recoveringSites += 1;
+    else if (recStatus === "recovered") recoveredSites += 1;
+    if (needsHuman) sitesNeedingHuman += 1;
+
+    const hasError = errCount > 0 || Boolean(lastErr) || st.status === "failed" || needsHuman || Boolean(rec.captcha_detected);
+    let category = "";
+    if (hasError) {
+      category = classifyFrontendErrorCategory(lastErrType, `${lastErr} ${recMsg}`, !!rec.captcha_detected);
+      const weight = errCount > 0 ? errCount : 1;
+      breakdown[category] = (breakdown[category] || 0) + weight;
+      totalErrors += weight;
+      sitesWithErrors += 1;
+    }
+
+    if (hasError || st.status === "paused" || recAttempts > 0) {
+      const meta = resolveCombinedSiteMeta(id, st.site_name || rec.site_name, st.group);
+      attention.push({
+        site_id: id,
+        site_name: meta.site_name,
+        group: meta.group,
+        status: needsHuman ? "needs_human" : (st.status || "stopped"),
+        error_count: errCount > 0 ? errCount : (hasError ? 1 : 0),
+        error_category: category || "connection",
+        last_error_type: lastErrType,
+        last_error: lastErr || recMsg,
+        recovery_status: recStatus || (needsHuman ? "needs_human" : "idle"),
+        recovery_attempts: recAttempts,
+        needs_human: needsHuman,
+        last_recovery_scenario: recScenario,
+        last_recovery_message: recMsg,
+      });
+    }
+  }
+
+  return {
+    total_errors: totalErrors,
+    sites_with_errors: sitesWithErrors,
+    sites_needing_human: sitesNeedingHuman,
+    recovering_sites: recoveringSites,
+    recovered_sites: recoveredSites,
+    error_type_breakdown: breakdown,
+    sites_needing_attention: attention,
+  };
+}
+
+async function refreshErrorDashboard() {
+  try {
+    if (backend() && typeof backend().GetErrorDashboardSummary === "function") {
+      const summary = await invoke("GetErrorDashboardSummary");
+      if (summary && typeof summary === "object") {
+        state.errorSummary = summary;
+        renderErrorDashboard();
+        return;
+      }
+    }
+  } catch (_) { /* fallback below */ }
+  state.errorSummary = computeFallbackErrorSummary();
+  renderErrorDashboard();
+}
+
+function renderErrorDashboard() {
+  const summary = state.errorSummary || computeFallbackErrorSummary();
+  const bd = summary.error_type_breakdown || {};
+  const attention = Array.isArray(summary.sites_needing_attention) ? summary.sites_needing_attention : [];
+
+  const setNum = (id, val) => {
+    const el = byId(id);
+    if (el) el.textContent = String(val ?? 0);
+  };
+  setNum("cc-err-total", summary.total_errors || 0);
+  setNum("cc-err-type-connection", bd.connection || 0);
+  setNum("cc-err-type-auth", bd.auth || 0);
+  setNum("cc-err-type-ban", bd.ban || 0);
+  setNum("cc-err-type-captcha", bd.captcha || 0);
+  setNum("cc-err-type-timeout", bd.timeout || 0);
+  setNum("cc-rec-recovering", summary.recovering_sites || 0);
+  setNum("cc-rec-needs-human", summary.sites_needing_human || 0);
+  setNum("cc-rec-recovered", summary.recovered_sites || 0);
+
+  const pill = byId("cc-error-summary-pill");
+  if (pill) {
+    pill.textContent = `${summary.total_errors || 0} Errors · ${attention.length} Needs Attention`;
+  }
+
+  const list = byId("cc-attention-list");
+  const empty = byId("cc-attention-empty");
+  if (!list) return;
+
+  const frag = document.createDocumentFragment();
+  for (const item of attention) {
+    const row = document.createElement("div");
+    row.className = "cc-attention-row";
+    row.dataset.siteId = item.site_id;
+
+    const recLabel = item.needs_human
+      ? `🆘 needs_human (${item.recovery_attempts || 3}/3)`
+      : item.recovery_status
+        ? `${item.recovery_status}${item.last_recovery_scenario ? ` [Scenario ${item.last_recovery_scenario}]` : ""} (${item.recovery_attempts || 0}/3)`
+        : `idle (${item.recovery_attempts || 0}/3)`;
+
+    const mainDiv = document.createElement("div");
+    mainDiv.className = "cc-attention-main";
+
+    const grp = item.group || "A";
+    const siteBadge = document.createElement("span");
+    siteBadge.className = `combined-log-site group-color-${grp}`;
+    siteBadge.textContent = `[Group ${grp} · ${item.site_name || item.site_id}]`;
+
+    const errBadge = document.createElement("span");
+    errBadge.className = "smgr-badge";
+    errBadge.textContent = `Errors: ${Number(item.error_count || 0)}`;
+
+    const typeBadge = document.createElement("span");
+    typeBadge.className = "smgr-badge";
+    typeBadge.textContent = `Type: ${item.error_category || "connection"}`;
+
+    const recBadge = document.createElement("span");
+    recBadge.className = "smgr-badge";
+    recBadge.textContent = `Recovery: ${recLabel}`;
+
+    const hintSpan = document.createElement("span");
+    hintSpan.className = "hint-text";
+    hintSpan.textContent = item.last_error || item.last_recovery_message || "";
+
+    mainDiv.append(siteBadge, errBadge, typeBadge, recBadge, hintSpan);
+
+    const actDiv = document.createElement("div");
+    actDiv.className = "cc-attention-actions";
+
+    const recBtn = document.createElement("button");
+    recBtn.type = "button";
+    recBtn.className = "secondary-button smgr-mini-btn";
+    recBtn.dataset.ccRecover = item.site_id;
+    recBtn.textContent = "🔧 Self-Recover";
+    recBtn.addEventListener("click", () => recoverSiteFor(item.site_id, "auto"));
+
+    const detBtn = document.createElement("button");
+    detBtn.type = "button";
+    detBtn.className = "secondary-button smgr-mini-btn";
+    detBtn.dataset.ccDetail = item.site_id;
+    detBtn.textContent = "Detail";
+    detBtn.addEventListener("click", async () => {
+      activateDashboardTab("site-manager");
+      await openSiteDetailPanel(item.site_id);
+    });
+
+    actDiv.append(recBtn, detBtn);
+    row.append(mainDiv, actDiv);
+    frag.appendChild(row);
+  }
+  list.replaceChildren(frag);
+  if (empty) empty.hidden = attention.length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -2601,6 +2978,22 @@ function bindActions() {
   if (sessCapRecipe) {
     sessCapRecipe.addEventListener("click", runRecipeForActiveSite);
   }
+
+  // Prompt 13: Control Center Error Dashboard + Combined Live Log Bottom Bar
+  const ccErrorRefresh = byId("cc-error-refresh-btn");
+  if (ccErrorRefresh) {
+    ccErrorRefresh.addEventListener("click", () => refreshErrorDashboard());
+  }
+  const combFilterSite = byId("combined-log-filter-site");
+  const combFilterType = byId("combined-log-filter-type");
+  const combFilterGroup = byId("combined-log-filter-group");
+  const combAutoScroll = byId("combined-log-autoscroll");
+  const combClear = byId("combined-log-clear");
+  if (combFilterSite) combFilterSite.addEventListener("change", () => renderCombinedLiveLog());
+  if (combFilterType) combFilterType.addEventListener("change", () => renderCombinedLiveLog());
+  if (combFilterGroup) combFilterGroup.addEventListener("change", () => renderCombinedLiveLog());
+  if (combAutoScroll) combAutoScroll.addEventListener("change", () => renderCombinedLiveLog());
+  if (combClear) combClear.addEventListener("click", clearCombinedLiveLog);
 }
 
 function bindEvents() {
@@ -2608,11 +3001,13 @@ function bindEvents() {
   if (typeof runtime.EventsOn !== "function") return;
   runtime.EventsOn("ui:showlog", () => refreshShowLog());
   runtime.EventsOn("ui:botlog", () => refreshBotLog());
+  runtime.EventsOn("ui:combinedlog", () => refreshCombinedLiveLog());
   runtime.EventsOn("ui:site_statuses", (statuses) => {
     if (statuses && typeof statuses === "object") {
       state.siteStatuses = statuses;
       if (state.dashTab === "site-manager") renderSiteManager();
       if (state.dashTab === "sessions") renderSessionsTab();
+      refreshErrorDashboard();
     }
   });
   runtime.EventsOn("ui:session_captured", (summary) => {
@@ -2634,6 +3029,13 @@ function bindEvents() {
       state.recoveryStatuses[rep.site_id] = rep;
       showRecoveryBanner(rep);
       if (state.dashTab === "site-manager") renderSiteManager();
+      refreshErrorDashboard();
+      appendCombinedLogEntries([{
+        site_id: rep.site_id,
+        site_name: rep.site_name,
+        type: rep.needs_human || rep.status === "failed" ? "ERR" : "SYS",
+        message: rep.message || `Recovery Scenario ${rep.scenario || "A"} (${rep.attempts || 1}/${rep.max_attempts || 3})`,
+      }], "recovery");
     }
   });
   runtime.EventsOn("ui:show_running", (running) => {
@@ -2645,6 +3047,9 @@ function bindEvents() {
     renderRunning();
   });
   runtime.EventsOn("ui:log", (entry) => {
+    if (entry && entry.message) {
+      appendCombinedLogEntries([entry], "uilog");
+    }
     if (typeof entry.message === "string" && /\[[^\]]+ fresh \d+\/\d+\]/.test(entry.message)
         && !entry.message.includes("] Removed temporary browser data from ")) {
       setStatus("bg-login-status", entry.message, entry.level === "error" ? "error" : "");
@@ -2671,6 +3076,7 @@ async function bootstrap() {
       setInterval(refreshProfiles, 10000);
       setInterval(() => { if (state.tab === "show") refreshShowLog(); }, 1000);
       setInterval(() => { if (state.tab === "bot") refreshBotLog(); }, 1000);
+      setInterval(refreshCombinedLiveLog, 1000);
       return;
     } catch (error) {
       await new Promise((resolve) => setTimeout(resolve, 200));

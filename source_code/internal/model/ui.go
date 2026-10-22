@@ -107,9 +107,13 @@ type HomeStats struct {
 }
 
 type LogEntry struct {
-	Time    string `json:"time"`
-	Level   string `json:"level"`
-	Message string `json:"message"`
+	Time     string `json:"time"`
+	Level    string `json:"level"`
+	SiteID   string `json:"site_id,omitempty"`
+	SiteName string `json:"site_name,omitempty"`
+	Group    string `json:"group,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Message  string `json:"message"`
 }
 
 type SiteOption struct {

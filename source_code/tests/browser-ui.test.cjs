@@ -687,6 +687,157 @@ test('Prompt 12: Agent Self-Recovery (Scenarios A-E) triggers RecoverSite, shows
   } finally { dom.window.close(); }
 });
 
+test('Prompt 13: Combined Live Log bottom bar (visible across all tabs, group colors, site/type/group filters, 500-line cap, Clear) + Control Center Error Dashboard', async () => {
+  const mockSites = [
+    { id: 'chatib', name: 'Chatib.us', group: 'A', session_status: 'valid', has_saved_session: true },
+    { id: 'chitchat', name: 'ChitChat.gg', group: 'B', session_status: 'valid', has_saved_session: true },
+    { id: 'emeraldchat', name: 'EmeraldChat.com', group: 'C', session_status: 'missing', has_saved_session: false },
+    { id: 'e_chat', name: 'E-Chat.co', group: 'D', session_status: 'missing', has_saved_session: false },
+  ];
+  const snap = snapshot({ active_site: 'chatib', sites: mockSites });
+
+  const combinedEntries = [];
+  for (let i = 1; i <= 505; i += 1) {
+    const site = mockSites[i % mockSites.length];
+    const types = ['OUT', 'IN', 'ERR', 'SYS'];
+    combinedEntries.push({
+      seq: i,
+      time: `14:00:${String(i % 60).padStart(2, '0')}`,
+      site_id: site.id,
+      site_name: site.name,
+      group: site.group,
+      type: types[i % types.length],
+      message: `Line #${i} from ${site.name}`,
+    });
+  }
+
+  let cleared = false;
+  const { dom, w, d } = setup({
+    GetCombinedLiveLog: async () => ({
+      version: 505,
+      entries: cleared ? [] : combinedEntries,
+      dropped: 5,
+    }),
+    ClearCombinedLiveLog: async () => {
+      cleared = true;
+    },
+    GetErrorDashboardSummary: async () => ({
+      total_errors: 9,
+      sites_with_errors: 3,
+      sites_needing_human: 1,
+      recovering_sites: 1,
+      recovered_sites: 2,
+      error_type_breakdown: {
+        connection: 2,
+        auth: 3,
+        ban: 1,
+        captcha: 2,
+        timeout: 1,
+      },
+      sites_needing_attention: [
+        {
+          site_id: 'emeraldchat',
+          site_name: 'EmeraldChat.com',
+          group: 'C',
+          status: 'needs_human',
+          error_count: 3,
+          error_category: 'captcha',
+          last_error: 'Turnstile challenge detected',
+          recovery_status: 'needs_human',
+          recovery_attempts: 3,
+          needs_human: true,
+          last_recovery_scenario: 'scenario_a',
+        },
+        {
+          site_id: 'e_chat',
+          site_name: 'E-Chat.co',
+          group: 'D',
+          status: 'failed',
+          error_count: 2,
+          error_category: 'connection',
+          last_error: 'WebSocket dial failed',
+          recovery_status: 'recovering',
+          recovery_attempts: 1,
+          needs_human: false,
+          last_recovery_scenario: 'scenario_c',
+        },
+      ],
+    }),
+  }, snap);
+
+  try {
+    w.bindTabs();
+    w.fillForms(snap);
+    w.syncCombinedLogSiteFilterOptions();
+    await w.refreshCombinedLiveLog();
+    await w.refreshErrorDashboard();
+
+    // 1. Bottom bar is visible across all 3 tabs
+    const bar = d.getElementById('combined-live-log-bar');
+    assert.ok(bar);
+    assert.equal(bar.closest('.dash-tab-panel'), null, 'bottom bar must live outside individual tab panels so it stays visible across all tabs');
+
+    for (const tabBtnId of ['dash-tab-control-center', 'dash-tab-site-manager', 'dash-tab-sessions']) {
+      d.getElementById(tabBtnId).click();
+      assert.equal(bar.hidden, false);
+    }
+
+    // 2. Enforces 500-line cap and renders timestamp + group-colored site name + OUT/IN/ERR/SYS + message
+    const rows = d.querySelectorAll('#combined-log-list .combined-log-row');
+    assert.equal(rows.length, 500);
+    assert.equal(d.getElementById('combined-log-count-badge').textContent, '500 / 500 lines');
+    const firstRow = rows[0];
+    assert.ok(firstRow.querySelector('.combined-log-time').textContent.length > 0);
+    assert.match(firstRow.querySelector('.combined-log-site').className, /group-color-[A-E]/);
+    assert.match(firstRow.querySelector('.combined-log-type').textContent, /^(OUT|IN|ERR|SYS)$/);
+    assert.match(firstRow.querySelector('.combined-log-msg').textContent, /Line #6/);
+
+    // 3. Filter by site, type, and group
+    const siteSel = d.getElementById('combined-log-filter-site');
+    siteSel.value = 'chatib';
+    siteSel.dispatchEvent(new w.Event('change', { bubbles: true }));
+    const siteRows = d.querySelectorAll('#combined-log-list .combined-log-row');
+    assert.ok(siteRows.length > 0 && siteRows.length < 500);
+    assert.ok([...siteRows].every((r) => r.dataset.siteId === 'chatib'));
+
+    const typeSel = d.getElementById('combined-log-filter-type');
+    typeSel.value = 'OUT';
+    typeSel.dispatchEvent(new w.Event('change', { bubbles: true }));
+    const typeRows = d.querySelectorAll('#combined-log-list .combined-log-row');
+    assert.ok(typeRows.length > 0);
+    assert.ok([...typeRows].every((r) => r.dataset.type === 'OUT' && r.dataset.siteId === 'chatib'));
+
+    siteSel.value = 'all';
+    typeSel.value = 'all';
+    const groupSel = d.getElementById('combined-log-filter-group');
+    groupSel.value = 'D';
+    groupSel.dispatchEvent(new w.Event('change', { bubbles: true }));
+    const groupRows = d.querySelectorAll('#combined-log-list .combined-log-row');
+    assert.ok(groupRows.length > 0);
+    assert.ok([...groupRows].every((r) => r.dataset.group === 'D'));
+
+    // 4. Clear button resets combined feed
+    groupSel.value = 'all';
+    d.getElementById('combined-log-clear').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(d.querySelectorAll('#combined-log-list .combined-log-row').length, 0);
+    assert.equal(d.getElementById('combined-log-empty').hidden, false);
+
+    // 5. Control Center Error Summary & Recovery Dashboard
+    d.getElementById('dash-tab-control-center').click();
+    assert.equal(d.getElementById('cc-err-total').textContent, '9');
+    assert.equal(d.getElementById('cc-err-type-connection').textContent, '2');
+    assert.equal(d.getElementById('cc-err-type-auth').textContent, '3');
+    assert.equal(d.getElementById('cc-err-type-ban').textContent, '1');
+    assert.equal(d.getElementById('cc-err-type-captcha').textContent, '2');
+    assert.equal(d.getElementById('cc-err-type-timeout').textContent, '1');
+    assert.equal(d.getElementById('cc-rec-recovering').textContent, '1');
+    assert.equal(d.getElementById('cc-rec-needs-human').textContent, '1');
+    assert.equal(d.getElementById('cc-rec-recovered').textContent, '2');
+    assert.equal(d.querySelectorAll('#cc-attention-list .cc-attention-row').length, 2);
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {

@@ -41,6 +41,7 @@ type App struct {
 	chatFeed        *homeChatFeed
 	showLog         *showLogFeed
 	botLog          *botLogFeed
+	combinedLog     *combinedLogFeed
 	showModeRunning bool
 	running         bool
 	runID           uint64
@@ -114,6 +115,11 @@ func (a *App) runnerSupervisor() *runner.Supervisor {
 		SettingsStore: st,
 		NotifyFunc: func(n runner.Notification) {
 			a.log(n.Level, fmt.Sprintf("[supervisor:%s] %s: %s", n.SiteID, n.Event, n.Reason))
+			kind := "system"
+			if strings.EqualFold(n.Level, "error") || strings.Contains(strings.ToLower(n.Event), "error") || strings.Contains(strings.ToLower(n.Event), "fail") {
+				kind = "error"
+			}
+			a.recordCombinedLog(n.SiteID, kind, fmt.Sprintf("%s — %s", n.Event, n.Reason), "")
 			a.emit("ui:runner-notification", n)
 		},
 	})
@@ -1455,6 +1461,11 @@ func (a *App) RecoverSite(siteID string, errorType string) (runner.RecoveryRepor
 		siteID = a.activeSiteID()
 	}
 	rep, err := a.runnerSupervisor().RecoverSite(siteID, errorType)
+	kind := "system"
+	if err != nil || rep.NeedsHuman || rep.Status == runner.RecoveryStatusFailed {
+		kind = "error"
+	}
+	a.recordCombinedLog(siteID, kind, fmt.Sprintf("Self-Recovery [Scenario %s] (%d/%d): %s", rep.Scenario, rep.Attempts, rep.MaxAttempts, rep.Message), rep.ErrorType)
 	a.emit("ui:recovery", rep)
 	a.emit("ui:site_statuses", a.GetSiteStatuses())
 	if err != nil {
@@ -1476,6 +1487,186 @@ func (a *App) ResetSiteRecovery(siteID string) (SiteDetailView, error) {
 	a.runnerSupervisor().ResetSiteRecovery(siteID)
 	a.emit("ui:site_statuses", a.GetSiteStatuses())
 	return a.GetSiteDetail(siteID)
+}
+
+// SiteErrorItem represents per-site error and recovery state for the Control Center
+// Error Dashboard (Prompt 13).
+type SiteErrorItem struct {
+	SiteID               string `json:"site_id"`
+	SiteName             string `json:"site_name"`
+	Group                string `json:"group"`
+	Status               string `json:"status"`
+	ErrorCount           int    `json:"error_count"`
+	ConsecutiveErrors    int    `json:"consecutive_errors"`
+	ErrorCategory        string `json:"error_category"` // connection | auth | ban | captcha | timeout
+	LastErrorType        string `json:"last_error_type,omitempty"`
+	LastError            string `json:"last_error,omitempty"`
+	RecoveryStatus       string `json:"recovery_status,omitempty"`
+	RecoveryAttempts     int    `json:"recovery_attempts"`
+	NeedsHuman           bool   `json:"needs_human"`
+	LastRecoveryScenario string `json:"last_recovery_scenario,omitempty"`
+	LastRecoveryMessage  string `json:"last_recovery_message,omitempty"`
+}
+
+// ErrorDashboardSummary aggregates multi-site error counts, error type breakdown
+// (connection/auth/ban/captcha/timeout), sites needing attention, and per-site
+// recovery status for Control Center (Prompt 13).
+type ErrorDashboardSummary struct {
+	TotalErrors           int                              `json:"total_errors"`
+	SitesWithErrors       int                              `json:"sites_with_errors"`
+	SitesNeedingHuman     int                              `json:"sites_needing_human"`
+	RecoveringSites       int                              `json:"recovering_sites"`
+	RecoveredSites        int                              `json:"recovered_sites"`
+	ErrorTypeBreakdown    map[string]int                   `json:"error_type_breakdown"`
+	PerSiteErrors         []SiteErrorItem                  `json:"per_site_errors"`
+	SitesNeedingAttention []SiteErrorItem                  `json:"sites_needing_attention"`
+	RecoveryStatuses      map[string]runner.RecoveryReport `json:"recovery_statuses"`
+}
+
+func classifyErrorCategory(errType, errMsg string, captchaDetected bool) string {
+	if captchaDetected {
+		return "captcha"
+	}
+	combined := strings.ToLower(strings.TrimSpace(errType + " " + errMsg))
+	switch {
+	case strings.Contains(combined, "captcha") || strings.Contains(combined, "cloudflare") || strings.Contains(combined, "turnstile"):
+		return "captcha"
+	case strings.Contains(combined, "ban") || strings.Contains(combined, "suspend") || strings.Contains(combined, "block"):
+		return "ban"
+	case strings.Contains(combined, "auth") || strings.Contains(combined, "login") || strings.Contains(combined, "session") || strings.Contains(combined, "401") || strings.Contains(combined, "403") || strings.Contains(combined, "signup"):
+		return "auth"
+	case strings.Contains(combined, "timeout") || strings.Contains(combined, "deadline") || strings.Contains(combined, "timed out"):
+		return "timeout"
+	default:
+		return "connection"
+	}
+}
+
+// GetErrorDashboardSummary returns the aggregate error summary and per-site recovery
+// status for the Control Center Error Dashboard (Prompt 13).
+func (a *App) GetErrorDashboardSummary() ErrorDashboardSummary {
+	statuses := a.GetSiteStatuses()
+	recStatuses := a.GetRecoveryStatuses()
+	breakdown := map[string]int{
+		"connection": 0,
+		"auth":       0,
+		"ban":        0,
+		"captcha":    0,
+		"timeout":    0,
+	}
+
+	var perSite []SiteErrorItem
+	var attention []SiteErrorItem
+	totalErrors := 0
+	sitesWithErrors := 0
+	sitesNeedingHuman := 0
+	recoveringSites := 0
+	recoveredSites := 0
+
+	ids := make([]string, 0, len(statuses))
+	for id := range statuses {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		st := statuses[id]
+		rec, hasRec := recStatuses[id]
+		errCount := st.TotalErrors
+		if errCount == 0 && st.ConsecutiveErrors > 0 {
+			errCount = st.ConsecutiveErrors
+		}
+		needsHuman := st.NeedsHuman || rec.NeedsHuman || st.Status == runner.StatusNeedsHuman || rec.Status == runner.RecoveryStatusNeedsHuman
+		recStatus := st.RecoveryStatus
+		if hasRec && rec.Status != "" {
+			recStatus = rec.Status
+		}
+		recAttempts := st.RecoveryAttempts
+		if hasRec && rec.Attempts > recAttempts {
+			recAttempts = rec.Attempts
+		}
+		recScenario := st.LastRecoveryScenario
+		if hasRec && rec.Scenario != "" {
+			recScenario = rec.Scenario
+		}
+		recMsg := st.LastRecoveryMessage
+		if hasRec && rec.Message != "" {
+			recMsg = rec.Message
+		}
+
+		if recStatus == runner.RecoveryStatusRecovering {
+			recoveringSites++
+		} else if recStatus == runner.RecoveryStatusRecovered {
+			recoveredSites++
+		}
+		if needsHuman {
+			sitesNeedingHuman++
+		}
+
+		hasErrorOrAttention := errCount > 0 ||
+			strings.TrimSpace(st.LastError) != "" ||
+			st.Status == runner.StatusFailed ||
+			st.Status == runner.StatusPaused ||
+			needsHuman ||
+			recAttempts > 0
+
+		category := ""
+		if errCount > 0 || strings.TrimSpace(st.LastError) != "" || st.Status == runner.StatusFailed || needsHuman || rec.CaptchaDetected {
+			category = classifyErrorCategory(st.LastErrorType, st.LastError+" "+recMsg, rec.CaptchaDetected)
+			weight := errCount
+			if weight <= 0 {
+				weight = 1
+			}
+			breakdown[category] += weight
+			totalErrors += weight
+			sitesWithErrors++
+		}
+
+		group := strings.ToUpper(strings.TrimSpace(st.Group))
+		if group == "" {
+			group = "A"
+		}
+		siteName := strings.TrimSpace(st.SiteName)
+		if siteName == "" {
+			siteName = id
+		}
+
+		item := SiteErrorItem{
+			SiteID:               id,
+			SiteName:             siteName,
+			Group:                group,
+			Status:               st.Status,
+			ErrorCount:           errCount,
+			ConsecutiveErrors:    st.ConsecutiveErrors,
+			ErrorCategory:        category,
+			LastErrorType:        st.LastErrorType,
+			LastError:            st.LastError,
+			RecoveryStatus:       recStatus,
+			RecoveryAttempts:     recAttempts,
+			NeedsHuman:           needsHuman,
+			LastRecoveryScenario: recScenario,
+			LastRecoveryMessage:  recMsg,
+		}
+
+		if errCount > 0 || strings.TrimSpace(st.LastError) != "" {
+			perSite = append(perSite, item)
+		}
+		if hasErrorOrAttention {
+			attention = append(attention, item)
+		}
+	}
+
+	return ErrorDashboardSummary{
+		TotalErrors:           totalErrors,
+		SitesWithErrors:       sitesWithErrors,
+		SitesNeedingHuman:     sitesNeedingHuman,
+		RecoveringSites:       recoveringSites,
+		RecoveredSites:        recoveredSites,
+		ErrorTypeBreakdown:    breakdown,
+		PerSiteErrors:         perSite,
+		SitesNeedingAttention: attention,
+		RecoveryStatuses:      recStatuses,
+	}
 }
 
 // CaptureSession opens or captures a session for siteID using its isolated
@@ -2814,6 +3005,11 @@ func (a *App) log(level string, message string) {
 	disk.Log(level, message)
 	entry, err := a.uiStore.AppendLog(level, message)
 	if err == nil {
+		siteCfg := a.activeSiteConfig()
+		entry.SiteID = siteCfg.ID
+		entry.SiteName = siteCfg.Name
+		entry.Group = siteCfg.Classification.Group
+		entry.Type = normalizeCombinedType(level)
 		a.emit("ui:log", entry) // Browser status still consumes this event.
 	} else {
 		disk.Error(fmt.Sprintf("UI log persistence failed: %v", err))

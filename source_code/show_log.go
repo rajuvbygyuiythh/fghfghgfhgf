@@ -18,6 +18,9 @@ const showLogCapacity = 500
 type ShowLogEntry struct {
 	Seq       uint64 `json:"seq"`
 	Time      string `json:"time"`
+	SiteID    string `json:"site_id,omitempty"`
+	SiteName  string `json:"site_name,omitempty"`
+	Group     string `json:"group,omitempty"`
 	Kind      string `json:"kind"` // in | out | skip | system | error
 	Text      string `json:"text,omitempty"`
 	Rule      string `json:"rule,omitempty"`
@@ -101,12 +104,28 @@ func (a *App) showModeEvent(kind, text, rule, detail string, settingOK bool) {
 	} else if kind == "skip" {
 		level = "warn"
 	}
+	siteID := a.activeSiteID()
+	siteCfg := a.activeSiteConfig()
+	group := strings.ToUpper(strings.TrimSpace(siteCfg.Classification.Group))
+	if group == "" {
+		group = "A"
+	}
 	if a.dataDir != "" {
-		siteID := a.activeSiteID()
 		memory.DefaultStore(a.dataDir).RecordEvent("show_mode", siteID, kind, text, rule, detail, settingOK)
 		_ = sites.AppendSiteDebugLog(a.dataDir, siteID, "show_"+kind, level, text, strings.TrimSpace(rule+" "+detail))
 	}
-	a.addShowLog(ShowLogEntry{Kind: kind, Text: text, Rule: rule, Detail: detail, Level: level, SettingOK: settingOK})
+	a.addShowLog(ShowLogEntry{
+		SiteID:    siteID,
+		SiteName:  siteCfg.Name,
+		Group:     group,
+		Kind:      kind,
+		Text:      text,
+		Rule:      rule,
+		Detail:    detail,
+		Level:     level,
+		SettingOK: settingOK,
+	})
+	a.recordCombinedLog(siteID, kind, text, strings.TrimSpace(rule+" "+detail))
 }
 
 // showLiveError only records a feed error while a Show Mode run is active, so

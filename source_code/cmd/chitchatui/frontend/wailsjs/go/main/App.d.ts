@@ -142,6 +142,13 @@ export function StopSites(arg1:Array<string>):Promise<void>;
 
 export function StopAll():Promise<void>;
 
+export function GetCombinedLiveLog(arg1:number):Promise<any>;
+
+export function ClearCombinedLiveLog():Promise<void>;
+
+export function GetErrorDashboardSummary():Promise<any>;
+
+
 export function GetStatus(arg1:string):Promise<any>;
 
 export function GetAllStatuses():Promise<{[key: string]: any}>;
