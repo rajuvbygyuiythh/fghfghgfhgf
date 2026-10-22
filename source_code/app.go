@@ -1386,17 +1386,16 @@ func (a *App) GetSiteDetail(siteID string) (SiteDetailView, error) {
 
 	capturedAt := strings.TrimSpace(cfg.SessionSavedAt)
 	var expiresAt string
-	if capturedAt != "" {
-		if ts, parseErr := time.Parse(time.RFC3339, capturedAt); parseErr == nil {
-			expiresAt = ts.Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	sessStatus := opt.SessionStatus
+	if sessSummary, sessErr := sites.ValidateSiteSession(a.dataDir, cfg.ID); sessErr == nil {
+		if sessSummary.Status != "" {
+			sessStatus = sessSummary.Status
 		}
-	}
-	if sessMeta, sessErr := sites.LoadIsolatedSiteSession(a.dataDir, cfg.ID); sessErr == nil {
-		if capturedAt == "" && sessMeta.UpdatedAt != "" {
-			capturedAt = sessMeta.UpdatedAt
-			if ts, parseErr := time.Parse(time.RFC3339, capturedAt); parseErr == nil {
-				expiresAt = ts.Add(24 * time.Hour).UTC().Format(time.RFC3339)
-			}
+		if sessSummary.CapturedAt != "" {
+			capturedAt = sessSummary.CapturedAt
+		}
+		if sessSummary.ExpiresAt != "" {
+			expiresAt = sessSummary.ExpiresAt
 		}
 	}
 
@@ -1418,7 +1417,7 @@ func (a *App) GetSiteDetail(siteID string) (SiteDetailView, error) {
 		ConnectionType:    connType,
 		AccountMode:       cfg.AccountMode,
 		AccountCount:      cfg.AccountCount,
-		SessionStatus:     opt.SessionStatus,
+		SessionStatus:     sessStatus,
 		SessionCapturedAt: capturedAt,
 		SessionExpiresAt:  expiresAt,
 		SessionPath:       cfg.SessionPath,
@@ -1437,6 +1436,81 @@ func (a *App) GetSiteDetail(siteID string) (SiteDetailView, error) {
 		Override:          ov,
 		Effective:         eff,
 	}, nil
+}
+
+// CaptureSession opens or captures a session for siteID using its isolated
+// browser profile (sites/<site_id>/profiles/default/) and writes cookies.json,
+// local_storage.json, ws_endpoints.json, auth_tokens.json, and meta.json into
+// sites/<site_id>/sessions/default/ (Prompt 10).
+func (a *App) CaptureSession(siteID string) (sites.SiteSessionSummary, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	summary, err := sites.CaptureSiteSession(a.dataDir, siteID, nil)
+	if err != nil {
+		return sites.SiteSessionSummary{}, err
+	}
+	_ = a.runnerSupervisor().ReloadSiteConfig(summary.SiteID)
+	a.log("info", fmt.Sprintf("Captured isolated session for %s -> sites/%s/sessions/default/ (%s)", summary.SiteID, summary.SiteID, summary.Status))
+	a.emit("ui:session_captured", summary)
+	return summary, nil
+}
+
+// ValidateSession validates the session files in sites/<site_id>/sessions/default/
+// and returns the site's current SiteSessionSummary (`valid`, `expiring`, `missing`) (Prompt 10).
+func (a *App) ValidateSession(siteID string) (sites.SiteSessionSummary, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	return sites.ValidateSiteSession(a.dataDir, siteID)
+}
+
+// ClearSession removes the saved session inside sites/<site_id>/sessions/default/
+// without touching any other site's folder (Prompt 10).
+func (a *App) ClearSession(siteID string) (sites.SiteSessionSummary, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	summary, err := sites.ClearSiteSession(a.dataDir, siteID)
+	if err != nil {
+		return sites.SiteSessionSummary{}, err
+	}
+	_ = a.runnerSupervisor().ReloadSiteConfig(summary.SiteID)
+	a.log("info", fmt.Sprintf("Cleared isolated session for %s (sites/%s/sessions/default/)", summary.SiteID, summary.SiteID))
+	a.emit("ui:session_cleared", summary)
+	return summary, nil
+}
+
+// GetSessionStatuses returns the aggregate session health summary (Valid, Expiring, Missing)
+// and per-site session statuses across all sites in the catalog (Prompt 10).
+func (a *App) GetSessionStatuses() (sites.SessionHealthOverview, error) {
+	return sites.GetAllSessionStatuses(a.dataDir)
+}
+
+// CaptureMissingSessionsBatch captures up to batchSize (default 5) sites whose
+// session status is currently "missing" (Prompt 10).
+func (a *App) CaptureMissingSessionsBatch(batchSize int) ([]sites.SiteSessionSummary, error) {
+	if batchSize <= 0 {
+		batchSize = 5
+	}
+	overview, err := sites.GetAllSessionStatuses(a.dataDir)
+	if err != nil {
+		return nil, err
+	}
+	captured := make([]sites.SiteSessionSummary, 0, batchSize)
+	for _, s := range overview.Sites {
+		if len(captured) >= batchSize {
+			break
+		}
+		if s.Status != sites.SessionStateMissing {
+			continue
+		}
+		sum, cErr := a.CaptureSession(s.SiteID)
+		if cErr == nil {
+			captured = append(captured, sum)
+		}
+	}
+	return captured, nil
 }
 
 // SaveSiteOverride saves per-site overrides (custom proxy, custom message mode,

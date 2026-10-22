@@ -46,6 +46,16 @@ export function SaveSiteOverride(arg1:string,arg2:any):Promise<any>;
 
 export function RefreshSiteSession(arg1:string):Promise<any>;
 
+export function CaptureSession(arg1:string):Promise<any>;
+
+export function ValidateSession(arg1:string):Promise<any>;
+
+export function ClearSession(arg1:string):Promise<any>;
+
+export function GetSessionStatuses():Promise<any>;
+
+export function CaptureMissingSessionsBatch(arg1:number):Promise<any>;
+
 export function GetLocalTestChatState():Promise<any>;
 
 export function ListProfiles():Promise<Array<main.ProfileOption>>;

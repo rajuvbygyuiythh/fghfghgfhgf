@@ -86,6 +86,26 @@ export function RefreshSiteSession(arg1) {
   return window['go']['main']['App']['RefreshSiteSession'](arg1);
 }
 
+export function CaptureSession(arg1) {
+  return window['go']['main']['App']['CaptureSession'](arg1);
+}
+
+export function ValidateSession(arg1) {
+  return window['go']['main']['App']['ValidateSession'](arg1);
+}
+
+export function ClearSession(arg1) {
+  return window['go']['main']['App']['ClearSession'](arg1);
+}
+
+export function GetSessionStatuses() {
+  return window['go']['main']['App']['GetSessionStatuses']();
+}
+
+export function CaptureMissingSessionsBatch(arg1) {
+  return window['go']['main']['App']['CaptureMissingSessionsBatch'](arg1);
+}
+
 export function GetLocalTestChatState() {
   return window['go']['main']['App']['GetLocalTestChatState']();
 }

@@ -25,6 +25,8 @@ const state = {
   collapsedGroups: {},
   selectedSites: [],
   siteStatuses: {},
+  sessionStatuses: {},
+  sessFilterStatus: "all",
   detailOpen: true,
   activeSub: { show: "show-setting", bot: "bg-login" },
   showLog: { after: 0, entries: [], pending: false },
@@ -145,6 +147,7 @@ function activateDashboardTab(dashTab) {
     renderSiteManager();
   } else if (normalized === "sessions") {
     renderSessionsTab();
+    refreshSessionStatuses();
   }
 }
 
@@ -1348,30 +1351,55 @@ function renderSessionsTab() {
   const activeLabel = byId("sess-active-site-label");
   if (activeLabel) activeLabel.textContent = activeId;
 
-  let savedCount = 0;
+  const query = (byId("sess-search-input")?.value || "").trim().toLowerCase();
+  const statusFilter = byId("sess-filter-status")?.value || state.sessFilterStatus || "all";
+
+  let validCount = 0;
+  let expiringCount = 0;
+  let missingCount = 0;
   let runningCount = 0;
   let issueCount = 0;
   for (const s of sitesList) {
-    const sessState = resolveSiteSessionState(s);
+    const sessSummary = state.sessionStatuses[s.id] || {};
+    const sessState = sessSummary.status || resolveSiteSessionState(s);
     const rState = resolveSiteRunnerState(s.id);
-    if (sessState === "valid") savedCount += 1;
+    if (sessState === "valid") validCount += 1;
+    else if (sessState === "expiring") expiringCount += 1;
+    else missingCount += 1;
     if (rState === "running") runningCount += 1;
     if (rState === "paused" || rState === "failed" || rState === "banned" || sessState === "expiring") issueCount += 1;
   }
 
   const totalEl = byId("sess-stat-total");
+  const validEl = byId("sess-stat-valid");
+  const expiringEl = byId("sess-stat-expiring");
+  const missingEl = byId("sess-stat-missing");
   const savedEl = byId("sess-stat-saved");
   const runningEl = byId("sess-stat-running");
   const issuesEl = byId("sess-stat-issues");
   if (totalEl) totalEl.textContent = String(sitesList.length);
-  if (savedEl) savedEl.textContent = String(savedCount);
+  if (validEl) validEl.textContent = String(validCount);
+  if (expiringEl) expiringEl.textContent = String(expiringCount);
+  if (missingEl) missingEl.textContent = String(missingCount);
+  if (savedEl) savedEl.textContent = String(validCount);
   if (runningEl) runningEl.textContent = String(runningCount);
   if (issuesEl) issuesEl.textContent = String(issueCount);
 
-  listEl.replaceChildren();
+  const fragment = document.createDocumentFragment();
   for (const s of sitesList) {
-    const hasSaved = Boolean(s.has_saved_session || Number(s.account_count || 0) > 0);
-    const rState = resolveSiteRunnerState(s.id);
+    const sessSummary = state.sessionStatuses[s.id] || {};
+    const sessState = sessSummary.status || resolveSiteSessionState(s);
+    if (statusFilter !== "all" && sessState !== statusFilter) continue;
+    if (query) {
+      const hay = `${s.id} ${s.name || ""} ${s.start_url || ""}`.toLowerCase();
+      if (!hay.includes(query)) continue;
+    }
+
+    const grp = siteGroupCode(s);
+    const capturedAt = sessSummary.captured_at || s.session_saved_at || "Not captured yet";
+    const expiresAt = sessSummary.expires_at || (sessState === "valid" ? "24h window" : "N/A");
+    const sessionDir = sessSummary.session_dir || `sites/${s.id}/sessions/default`;
+
     const row = document.createElement("div");
     row.className = "site-session-row";
     row.dataset.sessionHealthRow = s.id;
@@ -1380,39 +1408,184 @@ function renderSessionsTab() {
     info.className = "site-session-info";
     const nameEl = document.createElement("div");
     nameEl.className = "site-session-name";
-    nameEl.textContent = `${s.name || s.id} (${s.id})`;
+    nameEl.textContent = `${s.name || s.id} (${s.id}) · Group ${grp}`;
     const metaEl = document.createElement("div");
     metaEl.className = "site-session-meta";
-    const sessionPath = s.session_path || `sites/${s.id}/sessions/${s.id}_session.json`;
-    metaEl.textContent = `Session Store: ${sessionPath} · Runner: ${rState}`;
+    metaEl.textContent = `Captured: ${capturedAt} · Expires: ${expiresAt} · Store: ${sessionDir}/`;
     info.append(nameEl, metaEl);
+
+    const badge = document.createElement("span");
+    badge.className = `smgr-session-badge session-${sessState}`;
+    badge.dataset.sessStatusBadge = s.id;
+    badge.textContent = sessionBadgeText(sessState);
 
     const actions = document.createElement("div");
     actions.className = "site-session-actions";
 
-    const badge = document.createElement("span");
-    badge.className = "site-session-badge" + (hasSaved ? " saved" : "");
-    badge.textContent = hasSaved
-      ? `✓ Healthy (${s.account_count || 1} saved)`
-      : "○ Needs Capture";
-
     const captureBtn = document.createElement("button");
     captureBtn.type = "button";
-    captureBtn.className = "secondary-button site-row-browser-btn";
-    captureBtn.dataset.sessCaptureBrowser = s.id;
-    captureBtn.textContent = "🌐 Capture Browser";
-    captureBtn.addEventListener("click", () => runSiteBrowserFor(s.id));
+    captureBtn.className = "primary-button site-mini-btn";
+    captureBtn.dataset.sessCapture = s.id;
+    captureBtn.textContent = "Capture";
+    captureBtn.addEventListener("click", () => captureSiteSessionFor(s.id, false));
 
-    const runBtn = document.createElement("button");
-    runBtn.type = "button";
-    runBtn.className = "primary-button site-row-bot-btn";
-    runBtn.dataset.sessRunBot = s.id;
-    runBtn.textContent = "🤖 Run Bot";
-    runBtn.addEventListener("click", () => runSiteBotFor(s.id));
+    const recaptureBtn = document.createElement("button");
+    recaptureBtn.type = "button";
+    recaptureBtn.className = "secondary-button site-mini-btn";
+    recaptureBtn.dataset.sessRecapture = s.id;
+    recaptureBtn.textContent = "Re-capture";
+    recaptureBtn.addEventListener("click", () => captureSiteSessionFor(s.id, true));
 
-    actions.append(badge, captureBtn, runBtn);
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "site-mini-btn";
+    clearBtn.dataset.sessClear = s.id;
+    clearBtn.textContent = "Clear";
+    clearBtn.addEventListener("click", () => clearSiteSessionFor(s.id));
+
+    actions.append(badge, captureBtn, recaptureBtn, clearBtn);
     row.append(info, actions);
-    listEl.appendChild(row);
+    fragment.appendChild(row);
+  }
+  listEl.replaceChildren(fragment);
+}
+
+async function refreshSessionStatuses() {
+  if (!backend() || typeof backend().GetSessionStatuses !== "function") return;
+  try {
+    const overview = await invoke("GetSessionStatuses");
+    if (overview && Array.isArray(overview.sites)) {
+      const map = {};
+      for (const item of overview.sites) {
+        if (item && item.site_id) {
+          map[item.site_id] = item;
+        }
+      }
+      state.sessionStatuses = map;
+      if (state.snapshot && Array.isArray(state.snapshot.sites)) {
+        for (const s of state.snapshot.sites) {
+          const item = map[s.id];
+          if (item) {
+            s.session_status = item.status;
+            s.has_saved_session = item.status === "valid" || item.status === "expiring";
+            if (item.captured_at) s.session_saved_at = item.captured_at;
+          }
+        }
+      }
+      renderSessionsTab();
+      if (state.dashTab === "site-manager") renderSiteManager();
+    }
+  } catch (_) { /* optional in lightweight mocks */ }
+}
+
+async function captureSiteSessionFor(siteId, isRecapture) {
+  const target = siteId || value("active-site-select") || "chitchat";
+  const label = isRecapture ? "Re-capturing" : "Capturing";
+  try {
+    setStatus("sess-status", `${label} isolated session in sites/${target}/sessions/default/…`);
+    setStatus("sess-capture-status", `${label} cookies, localStorage, WS URLs & auth tokens for sites/${target}/…`);
+    const summary = await invoke("CaptureSession", target);
+    if (summary && summary.site_id) {
+      state.sessionStatuses[summary.site_id] = summary;
+    }
+    if (state.snapshot && Array.isArray(state.snapshot.sites)) {
+      const siteObj = state.snapshot.sites.find((s) => s.id === target);
+      if (siteObj) {
+        siteObj.session_status = summary?.status || "valid";
+        siteObj.has_saved_session = true;
+        siteObj.session_saved_at = summary?.captured_at || new Date().toISOString();
+      }
+    }
+    renderSessionsTab();
+    renderSiteManager();
+    setStatus("sess-status", `✅ Session captured for sites/${target}/sessions/default/`, "ok");
+    setStatus("sess-capture-status", `Saved cookies.json, local_storage.json, ws_endpoints.json, auth_tokens.json, meta.json in sites/${target}/sessions/default/`, "ok");
+  } catch (error) {
+    const msg = error.message || String(error);
+    setStatus("sess-status", msg, "error");
+    setStatus("sess-capture-status", msg, "error");
+  }
+}
+
+async function validateSiteSessionFor(siteId) {
+  const target = siteId || value("active-site-select") || "chitchat";
+  try {
+    const summary = await invoke("ValidateSession", target);
+    if (summary && summary.site_id) {
+      state.sessionStatuses[summary.site_id] = summary;
+    }
+    renderSessionsTab();
+    setStatus("sess-capture-status", `Validated sites/${target}/sessions/default/: status=${summary?.status || "unknown"}`, "ok");
+  } catch (error) {
+    setStatus("sess-capture-status", error.message || String(error), "error");
+  }
+}
+
+async function clearSiteSessionFor(siteId) {
+  const target = siteId || value("active-site-select") || "chitchat";
+  try {
+    setStatus("sess-status", `Clearing session in sites/${target}/sessions/default/…`);
+    const summary = await invoke("ClearSession", target);
+    if (summary && summary.site_id) {
+      state.sessionStatuses[summary.site_id] = summary;
+    } else {
+      state.sessionStatuses[target] = { site_id: target, status: "missing" };
+    }
+    if (state.snapshot && Array.isArray(state.snapshot.sites)) {
+      const siteObj = state.snapshot.sites.find((s) => s.id === target);
+      if (siteObj) {
+        siteObj.session_status = "missing";
+        siteObj.has_saved_session = false;
+        siteObj.account_count = 0;
+        siteObj.session_saved_at = "";
+      }
+    }
+    renderSessionsTab();
+    renderSiteManager();
+    setStatus("sess-status", `Cleared session in sites/${target}/sessions/default/`, "ok");
+    setStatus("sess-capture-status", `Cleared session in sites/${target}/sessions/default/`, "ok");
+  } catch (error) {
+    setStatus("sess-status", error.message || String(error), "error");
+  }
+}
+
+async function captureAllMissingSessionsBatch() {
+  const BATCH_SIZE = 5;
+  try {
+    setStatus("sess-status", `Capturing missing sessions (batch of ${BATCH_SIZE})…`);
+    if (backend() && typeof backend().CaptureMissingSessionsBatch === "function") {
+      const captured = await invoke("CaptureMissingSessionsBatch", BATCH_SIZE);
+      if (Array.isArray(captured)) {
+        for (const item of captured) {
+          if (item && item.site_id) {
+            state.sessionStatuses[item.site_id] = item;
+            const siteObj = state.snapshot?.sites?.find((s) => s.id === item.site_id);
+            if (siteObj) {
+              siteObj.session_status = item.status || "valid";
+              siteObj.has_saved_session = true;
+              siteObj.session_saved_at = item.captured_at || new Date().toISOString();
+            }
+          }
+        }
+      }
+      renderSessionsTab();
+      renderSiteManager();
+      const count = Array.isArray(captured) ? captured.length : 0;
+      setStatus("sess-status", `Captured ${count} missing session(s) in batch of ${BATCH_SIZE}.`, "ok");
+      return;
+    }
+
+    const sitesList = Array.isArray(state.snapshot?.sites) ? state.snapshot.sites : [];
+    const missingIds = sitesList
+      .filter((s) => ((state.sessionStatuses[s.id]?.status || resolveSiteSessionState(s)) === "missing"))
+      .slice(0, BATCH_SIZE)
+      .map((s) => s.id);
+    for (const id of missingIds) {
+      await captureSiteSessionFor(id, false);
+    }
+    setStatus("sess-status", `Captured ${missingIds.length} missing session(s) in batch of ${BATCH_SIZE}.`, "ok");
+  } catch (error) {
+    setStatus("sess-status", error.message || String(error), "error");
   }
 }
 
@@ -2250,14 +2423,42 @@ function bindActions() {
   });
 
   const sessRefresh = byId("sess-refresh-btn");
+  const sessCapMissing = byId("sess-capture-missing-btn");
+  const sessCapActive = byId("sess-capture-active-btn");
+  const sessValActive = byId("sess-validate-active-btn");
+  const sessClrActive = byId("sess-clear-active-btn");
   const sessCapBrowser = byId("sess-capture-browser-btn");
   const sessCapAutoReg = byId("sess-capture-autoreg-btn");
   const sessCapRecipe = byId("sess-capture-recipe-btn");
+  const sessSearch = byId("sess-search-input");
+  const sessFilterStatus = byId("sess-filter-status");
   if (sessRefresh) {
     sessRefresh.addEventListener("click", async () => {
       await refreshState();
       await refreshSiteStatuses();
+      await refreshSessionStatuses();
       setStatus("sess-status", "Session health refreshed.", "ok");
+    });
+  }
+  if (sessCapMissing) {
+    sessCapMissing.addEventListener("click", captureAllMissingSessionsBatch);
+  }
+  if (sessCapActive) {
+    sessCapActive.addEventListener("click", () => captureSiteSessionFor(value("active-site-select") || "chitchat", false));
+  }
+  if (sessValActive) {
+    sessValActive.addEventListener("click", () => validateSiteSessionFor(value("active-site-select") || "chitchat"));
+  }
+  if (sessClrActive) {
+    sessClrActive.addEventListener("click", () => clearSiteSessionFor(value("active-site-select") || "chitchat"));
+  }
+  if (sessSearch) {
+    sessSearch.addEventListener("input", () => renderSessionsTab());
+  }
+  if (sessFilterStatus) {
+    sessFilterStatus.addEventListener("change", (e) => {
+      state.sessFilterStatus = e.target.value || "all";
+      renderSessionsTab();
     });
   }
   if (sessCapBrowser) {
@@ -2288,6 +2489,20 @@ function bindEvents() {
       state.siteStatuses = statuses;
       if (state.dashTab === "site-manager") renderSiteManager();
       if (state.dashTab === "sessions") renderSessionsTab();
+    }
+  });
+  runtime.EventsOn("ui:session_captured", (summary) => {
+    if (summary && summary.site_id) {
+      state.sessionStatuses[summary.site_id] = summary;
+      renderSessionsTab();
+      if (state.dashTab === "site-manager") renderSiteManager();
+    }
+  });
+  runtime.EventsOn("ui:session_cleared", (summary) => {
+    if (summary && summary.site_id) {
+      state.sessionStatuses[summary.site_id] = summary;
+      renderSessionsTab();
+      if (state.dashTab === "site-manager") renderSiteManager();
     }
   });
   runtime.EventsOn("ui:show_running", (running) => {

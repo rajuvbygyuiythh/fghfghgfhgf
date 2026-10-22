@@ -1860,6 +1860,40 @@ details.advanced[open] summary {
   margin-bottom: 14px;
 }
 
+.sess-list-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sess-list-controls input {
+  width: 210px;
+}
+
+.sess-list-controls select {
+  width: 190px;
+}
+
+.sess-stat-valid strong {
+  color: #82cf9a;
+}
+
+.sess-stat-expiring strong {
+  color: #e8bd6b;
+}
+
+.sess-stat-missing strong {
+  color: #e57373;
+}
+
+.site-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 1000px) {
   .smgr-layout {
     grid-template-columns: 1fr;

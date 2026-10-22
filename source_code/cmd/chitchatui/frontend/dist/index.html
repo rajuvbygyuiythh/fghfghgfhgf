@@ -899,29 +899,42 @@
               <h1>Sessions</h1>
               <span id="sess-summary-badge" class="mode-badge">Session Capture &amp; Health Monitor</span>
             </div>
-            <p>Capture browser or browserless guest sessions into <code>sites/&lt;site_id&gt;/sessions/</code> and monitor real-time session health across all sites.</p>
+            <p>Capture cookies, localStorage, sessionStorage, WebSocket URLs, and auth headers into each site's isolated <code>sites/&lt;site_id&gt;/sessions/default/</code> folder.</p>
           </div>
           <div class="actions">
+            <button type="button" id="sess-capture-missing-btn" class="primary-button">&#9889; Capture All Missing (Batch of 5)</button>
             <button type="button" id="sess-refresh-btn" class="secondary-button">Refresh Health</button>
           </div>
         </header>
 
-        <p id="sess-status" class="status-line" role="status" aria-live="polite">Session store isolated per site.</p>
+        <p id="sess-status" class="status-line" role="status" aria-live="polite">Session store isolated per site (sites/&lt;site_id&gt;/sessions/default/).</p>
 
-        <div class="home-stats" id="sess-health-stats" aria-label="Session health summary">
+        <div class="home-stats sess-health-grid" id="sess-health-stats" aria-label="Session health summary">
           <div class="stat-capsule">
             <span>Total Sites</span>
             <strong id="sess-stat-total">0</strong>
           </div>
-          <div class="stat-capsule">
+          <div class="stat-capsule sess-stat-valid">
+            <span>&#9989; Valid Sessions</span>
+            <strong id="sess-stat-valid">0</strong>
+          </div>
+          <div class="stat-capsule sess-stat-expiring">
+            <span>&#9888;&#65039; Expiring Soon</span>
+            <strong id="sess-stat-expiring">0</strong>
+          </div>
+          <div class="stat-capsule danger sess-stat-missing">
+            <span>&#10060; Missing Sessions</span>
+            <strong id="sess-stat-missing">0</strong>
+          </div>
+          <div class="stat-capsule" hidden>
             <span>Saved Sessions</span>
             <strong id="sess-stat-saved">0</strong>
           </div>
-          <div class="stat-capsule">
+          <div class="stat-capsule" hidden>
             <span>Running Now</span>
             <strong id="sess-stat-running">0</strong>
           </div>
-          <div class="stat-capsule danger">
+          <div class="stat-capsule danger" hidden>
             <span>Needs Attention</span>
             <strong id="sess-stat-issues">0</strong>
           </div>
@@ -929,13 +942,16 @@
 
         <section class="card sess-capture-card" id="sess-capture-card">
           <div class="account-card-head">
-            <h2>1 · Session Capture (<span id="sess-active-site-label">chitchat</span>)</h2>
-            <span class="mode-badge">sites/&lt;site_id&gt;/sessions/</span>
+            <h2>1 · Active Site Session Capture (<span id="sess-active-site-label">chitchat</span>)</h2>
+            <span class="mode-badge">sites/&lt;site_id&gt;/sessions/default/</span>
           </div>
-          <p class="hint-text">Capture a fresh login session via visible browser, auto-register guest accounts without a browser, or run the Group A–E setup recipe for the selected site.</p>
+          <p class="hint-text">Uses isolated browser profile <code>sites/&lt;site_id&gt;/profiles/default/</code> and writes <code>cookies.json</code>, <code>local_storage.json</code>, <code>ws_endpoints.json</code>, <code>auth_tokens.json</code>, and <code>meta.json</code>.</p>
           <div class="form-actions">
-            <button type="button" id="sess-capture-browser-btn" class="primary-button">&#127760; Capture Session in Browser</button>
-            <button type="button" id="sess-capture-autoreg-btn" class="secondary-button">&#9889; Auto-Register Guest Session</button>
+            <button type="button" id="sess-capture-active-btn" class="primary-button">Capture Session</button>
+            <button type="button" id="sess-validate-active-btn" class="secondary-button">Validate Session</button>
+            <button type="button" id="sess-clear-active-btn" class="secondary-button">Clear Session</button>
+            <button type="button" id="sess-capture-browser-btn" class="secondary-button">&#127760; Capture in Browser</button>
+            <button type="button" id="sess-capture-autoreg-btn" class="secondary-button">&#9889; Auto-Register Guest</button>
             <button type="button" id="sess-capture-recipe-btn" class="secondary-button">&#9881; Run Setup Recipe</button>
           </div>
           <p id="sess-capture-status" class="status-line" role="status" aria-live="polite">Ready to capture session for active site.</p>
@@ -943,10 +959,18 @@
 
         <section class="card site-session-list-card">
           <div class="account-card-head">
-            <h2>2 · Session Health Monitor</h2>
-            <span class="mode-badge">Isolated Session Store</span>
+            <h2>2 · Per-Site Session List &amp; Health Monitor</h2>
+            <div class="sess-list-controls">
+              <input type="search" id="sess-search-input" placeholder="Search site name or ID…" aria-label="Search site sessions">
+              <select id="sess-filter-status" aria-label="Filter by session status">
+                <option value="all">All Statuses (✅ / ⚠️ / ❌)</option>
+                <option value="valid">✅ Valid</option>
+                <option value="expiring">⚠️ Expiring</option>
+                <option value="missing">❌ Missing</option>
+              </select>
+            </div>
           </div>
-          <p class="hint-text">Live session status, saved account counts, and isolated session file paths for each site.</p>
+          <p class="hint-text">Per-site session status (<code>✅ valid</code> / <code>⚠️ expiring</code> / <code>❌ missing</code>), captured timestamp, expiry, and isolated <code>Capture</code> / <code>Re-capture</code> / <code>Clear</code> controls.</p>
           <div id="sess-health-list" class="site-session-table" aria-live="polite"></div>
         </section>
       </div>

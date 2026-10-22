@@ -465,6 +465,112 @@ test('Prompt 9: Per-Site Detail slide-out panel renders stats, last error, sessi
   } finally { dom.window.close(); }
 });
 
+test('Prompt 10: Session Capture (Tab 3) renders health summary (Valid/Expiring/Missing), per-site Capture/Re-capture/Clear, and batch Capture All Missing (5)', async () => {
+  const capturedCalls = [];
+  const clearedCalls = [];
+  const batchCalls = [];
+
+  const mockSites = [
+    { id: 's1', name: 'Site 1', group: 'A', session_status: 'valid', has_saved_session: true, session_saved_at: '2026-10-22T09:00:00Z' },
+    { id: 's2', name: 'Site 2', group: 'B', session_status: 'expiring', has_saved_session: true, session_saved_at: '2026-10-21T12:00:00Z' },
+    { id: 's3', name: 'Site 3', group: 'C', session_status: 'missing', has_saved_session: false },
+    { id: 's4', name: 'Site 4', group: 'C', session_status: 'missing', has_saved_session: false },
+    { id: 's5', name: 'Site 5', group: 'D', session_status: 'missing', has_saved_session: false },
+    { id: 's6', name: 'Site 6', group: 'D', session_status: 'missing', has_saved_session: false },
+    { id: 's7', name: 'Site 7', group: 'E', session_status: 'missing', has_saved_session: false },
+    { id: 's8', name: 'Site 8', group: 'E', session_status: 'missing', has_saved_session: false },
+  ];
+  const snap = snapshot({ active_site: 's1', sites: mockSites });
+
+  const { dom, w, d } = setup({
+    GetSessionStatuses: async () => ({
+      total: 8,
+      valid: 1,
+      expiring: 1,
+      missing: 6,
+      sites: mockSites.map((s) => ({
+        site_id: s.id,
+        site_name: s.name,
+        group: s.group,
+        status: s.session_status,
+        captured_at: s.session_saved_at || '',
+        expires_at: s.session_status === 'valid' ? '2026-10-23T09:00:00Z' : '',
+        session_dir: `sites/${s.id}/sessions/default`,
+      })),
+    }),
+    CaptureSession: async (id) => {
+      capturedCalls.push(id);
+      return {
+        site_id: id,
+        status: 'valid',
+        captured_at: '2026-10-22T10:00:00Z',
+        expires_at: '2026-10-23T10:00:00Z',
+        session_dir: `sites/${id}/sessions/default`,
+      };
+    },
+    ClearSession: async (id) => {
+      clearedCalls.push(id);
+      return {
+        site_id: id,
+        status: 'missing',
+        session_dir: `sites/${id}/sessions/default`,
+      };
+    },
+    CaptureMissingSessionsBatch: async (batchSize) => {
+      batchCalls.push(batchSize);
+      return ['s1', 's4', 's5', 's6', 's7'].map((id) => ({
+        site_id: id,
+        status: 'valid',
+        captured_at: '2026-10-22T10:05:00Z',
+        expires_at: '2026-10-23T10:05:00Z',
+        session_dir: `sites/${id}/sessions/default`,
+      }));
+    },
+  }, snap);
+
+  try {
+    w.bindTabs();
+    w.fillForms(snap);
+    d.getElementById('dash-tab-sessions').click();
+    await new Promise((r) => setTimeout(r, 15));
+
+    // Verify health summary counts: 1 Valid, 1 Expiring, 6 Missing
+    assert.equal(d.getElementById('sess-stat-total').textContent, '8');
+    assert.equal(d.getElementById('sess-stat-valid').textContent, '1');
+    assert.equal(d.getElementById('sess-stat-expiring').textContent, '1');
+    assert.equal(d.getElementById('sess-stat-missing').textContent, '6');
+    assert.equal(d.querySelectorAll('#sess-health-list .site-session-row').length, 8);
+
+    // Per-site Capture on s3
+    d.querySelector('[data-sess-capture="s3"]').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(capturedCalls, ['s3']);
+    assert.equal(d.getElementById('sess-stat-valid').textContent, '2');
+    assert.equal(d.getElementById('sess-stat-missing').textContent, '5');
+
+    // Per-site Re-capture on s2 (expiring -> valid)
+    d.querySelector('[data-sess-recapture="s2"]').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(capturedCalls, ['s3', 's2']);
+    assert.equal(d.getElementById('sess-stat-valid').textContent, '3');
+    assert.equal(d.getElementById('sess-stat-expiring').textContent, '0');
+
+    // Per-site Clear on s1 (valid -> missing)
+    d.querySelector('[data-sess-clear="s1"]').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(clearedCalls, ['s1']);
+    assert.equal(d.getElementById('sess-stat-valid').textContent, '2');
+    assert.equal(d.getElementById('sess-stat-missing').textContent, '6');
+
+    // Bulk Capture All Missing (Batch of 5)
+    d.getElementById('sess-capture-missing-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.deepEqual(batchCalls, [5]);
+    assert.equal(d.getElementById('sess-stat-valid').textContent, '7');
+    assert.equal(d.getElementById('sess-stat-missing').textContent, '1');
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {
