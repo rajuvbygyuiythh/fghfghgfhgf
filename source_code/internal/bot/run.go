@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +17,24 @@ import (
 	"chitchatbot/internal/store"
 )
 
+// SessionConnection carries pre-authenticated browserless/headless session
+// credentials loaded from a site's isolated sites/<site_id>/sessions/default/
+// folder (Prompt 11).
+type SessionConnection struct {
+	SiteID         string
+	Method         string // "websocket", "api", "headless_dom", "manual"
+	WSURL          string
+	WSEndpoints    []string
+	AuthToken      string
+	AuthHeaders    map[string]string
+	Cookies        []model.Cookie
+	LocalStorage   map[string]string
+	SessionStorage map[string]string
+	HTTPClient     *http.Client
+	Headless       bool
+	ReconnectCount int
+}
+
 type Config struct {
 	firstIncomingID      string
 	FirstMessage         model.FirstMessageSettings
@@ -23,6 +42,7 @@ type Config struct {
 	SiteID               string
 	SiteFolder           string
 	WebSocketURL         string
+	SessionConn          *SessionConnection
 	AppURL               string
 	APIBaseURL           string
 	DataDir              string

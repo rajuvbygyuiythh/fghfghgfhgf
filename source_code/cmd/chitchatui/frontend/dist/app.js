@@ -848,8 +848,18 @@ function resolveSiteRunnerState(siteId) {
   return "stopped";
 }
 
+function siteNeedsSession(siteId) {
+  const st = state.siteStatuses[siteId] || {};
+  const reason = String(st.pause_reason || "").toLowerCase();
+  const lastErr = String(st.last_error || "").toLowerCase();
+  return reason.includes("needs session") || lastErr.includes("needs session");
+}
+
 function resolveSiteSessionState(site) {
   if (!site) return "missing";
+  if (siteNeedsSession(site.id || site.site_id)) {
+    return "missing";
+  }
   const explicit = String(site.session_status || "").toLowerCase();
   if (explicit === "valid" || explicit === "expiring" || explicit === "missing") {
     return explicit;
@@ -870,7 +880,8 @@ function resolveSiteSessionState(site) {
   return "valid";
 }
 
-function sessionBadgeText(sessState) {
+function sessionBadgeText(sessState, siteId) {
+  if (siteId && siteNeedsSession(siteId)) return "❌ needs session";
   if (sessState === "valid") return "✅ valid";
   if (sessState === "expiring") return "⚠️ expiring";
   return "❌ missing";
@@ -1274,12 +1285,12 @@ function renderSiteManager() {
       const statusBadge = document.createElement("span");
       statusBadge.className = `smgr-status-badge status-${rState}`;
       statusBadge.dataset.statusBadge = s.id;
-      statusBadge.textContent = rState;
+      statusBadge.textContent = siteNeedsSession(s.id) ? "paused · needs session" : rState;
 
       const sessionBadge = document.createElement("span");
       sessionBadge.className = `smgr-session-badge session-${sessState}`;
       sessionBadge.dataset.sessionBadge = s.id;
-      sessionBadge.textContent = sessionBadgeText(sessState);
+      sessionBadge.textContent = sessionBadgeText(sessState, s.id);
 
       const actions = document.createElement("div");
       actions.className = "smgr-grid-actions";

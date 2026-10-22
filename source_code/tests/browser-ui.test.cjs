@@ -571,6 +571,40 @@ test('Prompt 10: Session Capture (Tab 3) renders health summary (Valid/Expiring/
   } finally { dom.window.close(); }
 });
 
+test('Prompt 11: Browserless Chat expired session auto-pause displays "needs session" in Site Grid and Sessions tab', async () => {
+  const mockSites = [
+    { id: 'chitchat', name: 'ChitChat.gg', group: 'C', session_status: 'valid', has_saved_session: true },
+  ];
+  const snap = snapshot({ active_site: 'chitchat', sites: mockSites });
+
+  const events = {};
+  const { dom, w, d } = setup({}, snap);
+
+  try {
+    w.runtime = { EventsOn: (name, fn) => { events[name] = fn; } };
+    w.bindEvents();
+    w.bindTabs();
+    w.fillForms(snap);
+    d.getElementById('dash-tab-site-manager').click();
+
+    // Emit supervisor auto-pause due to expired session ("needs session")
+    events['ui:site_statuses']({
+      chitchat: {
+        status: 'paused',
+        paused: true,
+        auto_paused: true,
+        pause_reason: 'needs session',
+        last_error: 'needs session: session for chitchat expired',
+        last_error_type: 'auth expired',
+      },
+    });
+    await tick();
+
+    assert.equal(d.querySelector('[data-status-badge="chitchat"]').textContent, 'paused · needs session');
+    assert.equal(d.querySelector('[data-session-badge="chitchat"]').textContent, '❌ needs session');
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {

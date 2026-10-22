@@ -135,7 +135,32 @@ func ShouldWakeForRealtimeEvent(currentUserID string, event RealtimeEvent) bool 
 	return shouldWakeForRealtimeEvent(currentUserID, event)
 }
 
+// ConnectRealtimeSocketWithConnection connects to a site's WebSocket endpoint
+// using a pre-loaded browserless SessionConnection (Prompt 11).
+func ConnectRealtimeSocketWithConnection(
+	ctx context.Context,
+	cfg Config,
+	conn *SessionConnection,
+	login model.LoginInfo,
+	currentUserID string,
+	events chan<- RealtimeEvent,
+) error {
+	if conn != nil {
+		cfg.SessionConn = conn
+		if strings.TrimSpace(conn.WSURL) != "" {
+			cfg.WebSocketURL = conn.WSURL
+		}
+		if len(login.Cookies) == 0 && len(conn.Cookies) > 0 {
+			login.Cookies = conn.Cookies
+		}
+	}
+	return connectRealtimeSocket(ctx, cfg, login, currentUserID, events)
+}
+
 func effectiveRealtimeSocketURL(cfg Config) string {
+	if cfg.SessionConn != nil && strings.TrimSpace(cfg.SessionConn.WSURL) != "" {
+		return strings.TrimSpace(cfg.SessionConn.WSURL)
+	}
 	if u := strings.TrimSpace(cfg.WebSocketURL); u != "" {
 		return u
 	}
@@ -218,6 +243,9 @@ func connectRealtimeSocket(
 	events chan<- realtimeEvent,
 ) error {
 	token := strings.TrimSpace(login.Token())
+	if token == "" && cfg.SessionConn != nil {
+		token = strings.TrimSpace(cfg.SessionConn.AuthToken)
+	}
 	if token == "" {
 		return fmt.Errorf("missing token for realtime socket")
 	}
@@ -453,6 +481,13 @@ func realtimeHeadersForConfig(cfg Config, login model.LoginInfo, token string) h
 	headers.Set("Cookie", cookieHeader)
 	headers.Set("Cache-Control", "no-cache")
 	headers.Set("Pragma", "no-cache")
+	if cfg.SessionConn != nil {
+		for k, v := range cfg.SessionConn.AuthHeaders {
+			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
+				headers.Set(k, v)
+			}
+		}
+	}
 	return headers
 }
 

@@ -109,6 +109,27 @@ func apiChatSession(accountState *model.AccountState, userID string, rng *rand.R
 	return session
 }
 
+// WithSessionConnection attaches a browserless SessionConnection to a bot Config (Prompt 11).
+func (c Config) WithSessionConnection(conn *SessionConnection) Config {
+	c.SessionConn = conn
+	if conn != nil && strings.TrimSpace(conn.WSURL) != "" && strings.TrimSpace(c.WebSocketURL) == "" {
+		c.WebSocketURL = conn.WSURL
+	}
+	return c
+}
+
+// APIChatStartTurnWithConnection starts an API Chat conversation bound to a
+// browserless SessionConnection (Prompt 11).
+func APIChatStartTurnWithConnection(ctx context.Context, cfg Config, conn *SessionConnection, accountState *model.AccountState, userID string, rng *rand.Rand) EVAReplyResult {
+	return APIChatStartTurn(ctx, cfg.WithSessionConnection(conn), accountState, userID, rng)
+}
+
+// APIChatReplyTurnWithConnection processes one incoming user message bound to a
+// browserless SessionConnection (Prompt 11).
+func APIChatReplyTurnWithConnection(ctx context.Context, cfg Config, conn *SessionConnection, accountState *model.AccountState, userID, incoming string, rng *rand.Rand) EVAReplyResult {
+	return APIChatReplyTurn(ctx, cfg.WithSessionConnection(conn), accountState, userID, incoming, rng)
+}
+
 // APIChatStartTurn starts a new API Chat conversation for userID using
 // api_chat.go and updates the site's isolated AccountState.
 func APIChatStartTurn(ctx context.Context, cfg Config, accountState *model.AccountState, userID string, rng *rand.Rand) EVAReplyResult {

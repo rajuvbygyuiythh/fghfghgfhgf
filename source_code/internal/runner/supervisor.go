@@ -265,6 +265,7 @@ type CycleContext struct {
 	BotCfg       bot.Config
 	ChatSession  *bot.LocalChatSession
 	Browser      browser.Backend
+	Browserless  *BrowserlessConnection
 	Login        model.LoginInfo
 }
 
@@ -310,6 +311,7 @@ type siteRunner struct {
 	cancel          context.CancelFunc
 	done            chan struct{}
 	browserConn     browser.Backend
+	browserlessConn *BrowserlessConnection
 	chatSession     *bot.LocalChatSession
 	realtimeEvents  <-chan bot.RealtimeEvent
 	realtimeStop    context.CancelFunc
@@ -548,7 +550,19 @@ func (s *Supervisor) StartSite(siteID string) error {
 	eff, chatSession, botCfg, login, sessionPath, prepErr := s.prepareSiteExecution(sr.siteCtx, sr.siteCfg, sr.status.Profile)
 	if prepErr != nil {
 		sr.mu.Unlock()
+		if errors.Is(prepErr, ErrNeedsSession) {
+			sr.mu.Lock()
+			sr.status.LastError = prepErr.Error()
+			sr.status.LastErrorType = ErrorTypeAuthExpired
+			sr.mu.Unlock()
+			_ = s.pauseSiteInternal(sr.siteID, "needs session", true)
+		}
 		return prepErr
+	}
+
+	blessConn, _ := ConnectBrowserlessSite(s.dataDir, sr.siteID)
+	if blessConn != nil {
+		botCfg = botCfg.WithSessionConnection(blessConn.ToBotSessionConnection())
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -562,6 +576,7 @@ func (s *Supervisor) StartSite(siteID string) error {
 	sr.done = done
 	sr.eff = eff
 	sr.botCfg = botCfg
+	sr.browserlessConn = blessConn
 	sr.chatSession = chatSession
 	sr.domSeenIDs = make(map[string]bool)
 	sr.domConvID = ""
@@ -993,6 +1008,7 @@ func (s *Supervisor) runSiteLoop(
 		cycleNum++
 		sr.mu.Lock()
 		bConn := sr.browserConn
+		blessConn := sr.browserlessConn
 		curSiteCfg := sr.siteCfg
 		curEff := sr.eff
 		curBotCfg := sr.botCfg
@@ -1009,6 +1025,7 @@ func (s *Supervisor) runSiteLoop(
 			BotCfg:       curBotCfg,
 			ChatSession:  curChatSession,
 			Browser:      bConn,
+			Browserless:  blessConn,
 			Login:        login,
 		}
 
@@ -1060,6 +1077,16 @@ func (s *Supervisor) runSiteLoop(
 }
 
 func (s *Supervisor) executeOneCycle(ctx context.Context, sr *siteRunner, cc *CycleContext) (CycleResult, error) {
+	// Check whether the site's captured session in sites/<site_id>/sessions/default/meta.json
+	// has expired during execution; if so, return ErrNeedsSession so the site auto-pauses
+	// immediately with "needs session" (Prompt 11).
+	var meta sites.SessionMeta
+	if ok, mErr := cc.SiteCtx.LoadJSON(filepath.Join("sessions", "default", "meta.json"), &meta); mErr == nil && ok {
+		if isBundleExpired(sites.CapturedSessionBundle{Meta: meta}) || strings.EqualFold(meta.Status, sites.SessionStateMissing) || strings.EqualFold(meta.Status, "expired") {
+			return CycleResult{}, fmt.Errorf("%w: session for %s expired at %s", ErrNeedsSession, cc.SiteID, meta.ExpiresAt)
+		}
+	}
+
 	if s.cycleFunc != nil {
 		return s.cycleFunc(ctx, cc)
 	}
@@ -1543,6 +1570,24 @@ func (s *Supervisor) handleCycleError(sr *siteRunner, err error) {
 		Timestamp:         now,
 	})
 
+	if errors.Is(err, ErrNeedsSession) || strings.Contains(strings.ToLower(errMsg), "needs session") {
+		_ = s.pauseSiteInternal(sr.siteID, "needs session", true)
+		return
+	}
+
+	// Reconnect using the SAME session on transient connection/timeout errors (Prompt 11).
+	if errType == ErrorTypeConnection || errType == ErrorTypeTimeout {
+		sr.mu.Lock()
+		bless := sr.browserlessConn
+		sr.mu.Unlock()
+		if bless != nil {
+			if recErr := bless.Reconnect(context.Background()); errors.Is(recErr, ErrNeedsSession) {
+				_ = s.pauseSiteInternal(sr.siteID, "needs session", true)
+				return
+			}
+		}
+	}
+
 	if consec >= s.maxConsecutiveErrors {
 		pauseReason := fmt.Sprintf(
 			"Auto-paused after %d consecutive errors (last [%s]: %s)",
@@ -1575,6 +1620,15 @@ func (s *Supervisor) prepareSiteExecution(
 		}
 	} else {
 		eff = settings.Merge(settings.Default(), settings.Override{})
+	}
+
+	// If an explicit session meta exists in sites/<site_id>/sessions/default/meta.json
+	// and is expired, fail immediately with ErrNeedsSession ("needs session") (Prompt 11).
+	var meta sites.SessionMeta
+	if ok, mErr := siteCtx.LoadJSON(filepath.Join("sessions", "default", "meta.json"), &meta); mErr == nil && ok {
+		if isBundleExpired(sites.CapturedSessionBundle{Meta: meta}) || strings.EqualFold(meta.Status, sites.SessionStateMissing) || strings.EqualFold(meta.Status, "expired") {
+			return eff, nil, bot.Config{}, model.LoginInfo{}, "", fmt.Errorf("%w: session for %s expired at %s", ErrNeedsSession, siteCtx.SiteID, meta.ExpiresAt)
+		}
 	}
 
 	// Load or initialize the site's isolated session inside sites/<site_id>/sessions/.

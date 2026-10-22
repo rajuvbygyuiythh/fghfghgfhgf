@@ -13,7 +13,44 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/cdp"
 	"github.com/go-rod/rod/lib/input"
+
+	"chitchatbot/internal/model"
 )
+
+// DOMSessionConnection holds isolated session cookies, localStorage, and
+// headless configuration for launching a Group D site in headless Rod (Prompt 11).
+type DOMSessionConnection struct {
+	SiteID           string
+	StartURL         string
+	UserDataDir      string
+	Headless         bool
+	CustomDOMJS      string
+	ComposerSelector string
+	Login            model.LoginInfo
+}
+
+// ConnectHeadlessDOMSession launches a headless Rod browser using the site's
+// isolated UserDataDir, configures its site DOM driver, and injects saved
+// cookies and localStorage before navigating (Prompt 11).
+func ConnectHeadlessDOMSession(ctx context.Context, backend Backend, conn DOMSessionConnection) error {
+	if backend == nil {
+		return errors.New("browser backend is nil")
+	}
+	if configurer, ok := backend.(SiteDOMConfigurer); ok && strings.TrimSpace(conn.CustomDOMJS) != "" {
+		configurer.ConfigureSiteDOM(conn.CustomDOMJS, conn.ComposerSelector)
+	}
+	if err := backend.Start(ctx, Options{
+		StartURL:    conn.StartURL,
+		UserDataDir: conn.UserDataDir,
+		Headless:    conn.Headless,
+	}); err != nil {
+		return err
+	}
+	if len(conn.Login.Cookies) > 0 || len(conn.Login.LocalStorage) > 0 {
+		_ = backend.RestoreSession(ctx, conn.Login)
+	}
+	return nil
+}
 
 type DOMMessage struct {
 	ID     string `json:"id"`
