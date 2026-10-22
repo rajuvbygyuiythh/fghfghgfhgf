@@ -300,6 +300,20 @@ func (a *App) activeSiteDataDir() string {
 }
 
 func toSiteOption(c sites.Config) model.SiteOption {
+	hasSaved := c.HasSavedSession || c.AccountCount > 0
+	sessionStatus := "missing"
+	if hasSaved {
+		sessionStatus = "valid"
+		if raw := strings.TrimSpace(c.SessionSavedAt); raw != "" {
+			if strings.Contains(strings.ToLower(raw), "expir") {
+				sessionStatus = "expiring"
+			} else if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+				if time.Since(ts) > 20*time.Hour {
+					sessionStatus = "expiring"
+				}
+			}
+		}
+	}
 	return model.SiteOption{
 		ID:              c.ID,
 		Name:            c.Name,
@@ -310,6 +324,7 @@ func toSiteOption(c sites.Config) model.SiteOption {
 		AccountMode:     c.AccountMode,
 		AccountCount:    c.AccountCount,
 		HasSavedSession: c.HasSavedSession,
+		SessionStatus:   sessionStatus,
 		SessionSavedAt:  c.SessionSavedAt,
 		SessionPath:     c.SessionPath,
 		StartURL:        c.StartURL,
@@ -453,9 +468,30 @@ func (a *App) GetAllStatuses() map[string]runner.SiteStatus {
 	return a.runnerSupervisor().GetAllStatuses()
 }
 
-// GetSiteStatuses returns the status map for all tracked site runners (Prompt 6).
+// GetSiteStatuses returns the status map for all catalog and tracked site runners (Prompt 6 & Prompt 8).
 func (a *App) GetSiteStatuses() map[string]runner.SiteStatus {
-	return a.runnerSupervisor().GetSiteStatuses()
+	tracked := a.runnerSupervisor().GetSiteStatuses()
+	list, err := sites.List(a.dataDir)
+	if err != nil || len(list) == 0 {
+		return tracked
+	}
+	out := make(map[string]runner.SiteStatus, len(list)+len(tracked))
+	for id, st := range tracked {
+		out[id] = st
+	}
+	for _, cfg := range list {
+		if _, exists := out[cfg.ID]; !exists {
+			out[cfg.ID] = runner.SiteStatus{
+				SiteID:     cfg.ID,
+				SiteName:   cfg.Name,
+				Group:      cfg.Classification.Group,
+				GroupName:  cfg.Classification.GroupName,
+				Status:     runner.StatusStopped,
+				FolderPath: cfg.FolderPath,
+			}
+		}
+	}
+	return out
 }
 
 // GetSiteChatHistory reads the isolated chat_history.jsonl for siteID.

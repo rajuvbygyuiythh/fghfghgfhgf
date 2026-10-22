@@ -731,21 +731,54 @@
             <button type="button" id="smgr-group-d" class="site-filter-pill" data-smgr-group="D">Group D · DOM-Only</button>
             <button type="button" id="smgr-group-e" class="site-filter-pill" data-smgr-group="E">Group E · Manual</button>
           </div>
-          <div class="smgr-search-row">
-            <input type="text" id="smgr-search-input" placeholder="Filter site grid by name, ID, or URL…" autocomplete="off" aria-label="Search sites in Site Manager">
+          <div class="smgr-filter-row">
+            <input type="text" id="smgr-search-input" placeholder="Search 102 sites by name, ID, or URL…" autocomplete="off" aria-label="Search sites in Site Manager">
+            <select id="smgr-filter-group" aria-label="Filter by Group">
+              <option value="ALL">Group: All (A–E)</option>
+              <option value="A">Group A · Browserless</option>
+              <option value="B">Group B · Auto-Signup</option>
+              <option value="C">Group C · Browser-Once</option>
+              <option value="D">Group D · DOM-Only</option>
+              <option value="E">Group E · Manual</option>
+            </select>
+            <select id="smgr-filter-status" aria-label="Filter by Status">
+              <option value="all">Status: All</option>
+              <option value="running">🟢 Running</option>
+              <option value="paused">🟡 Paused</option>
+              <option value="failed">🔴 Failed</option>
+              <option value="banned">🟠 Banned</option>
+              <option value="stopped">⚪ Stopped</option>
+            </select>
+            <select id="smgr-filter-session" aria-label="Filter by Session">
+              <option value="all">Session: All</option>
+              <option value="valid">✅ Valid</option>
+              <option value="expiring">⚠️ Expiring</option>
+              <option value="missing">❌ Missing</option>
+            </select>
           </div>
         </section>
 
         <div class="smgr-layout">
           <section class="card smgr-grid-card" aria-label="Site Grid">
             <div class="account-card-head">
-              <h2>Site Grid</h2>
+              <h2>Site Grid (Group A–E Collapsible Sections)</h2>
               <span id="smgr-grid-count" class="status-line">0 sites shown</span>
             </div>
             <div id="smgr-site-grid" class="smgr-site-grid" aria-live="polite"></div>
+            <footer class="smgr-footer-bar" id="smgr-footer-bar" aria-label="Site Grid bulk actions">
+              <div class="smgr-footer-info">
+                <span id="smgr-selected-count" class="status-line">0 site(s) selected</span>
+                <span class="hint-text">Auto-refresh: every 5s</span>
+              </div>
+              <div class="actions">
+                <button type="button" id="smgr-footer-start-selected-btn" class="primary-button">&#9654; Start All Selected</button>
+                <button type="button" id="smgr-stop-all-btn" class="danger-button">&#9632; Stop All</button>
+                <button type="button" id="smgr-footer-refresh-btn" class="secondary-button">&#8635; Refresh</button>
+              </div>
+            </footer>
           </section>
 
-          <section class="card smgr-detail-card" id="smgr-site-detail" aria-label="Per-Site Detail">
+          <section class="card smgr-detail-card open" id="smgr-site-detail" aria-label="Per-Site Detail">
             <div class="account-card-head">
               <h2 id="smgr-detail-title">ChitChat.gg (chitchat)</h2>
               <span id="smgr-detail-status-badge" class="mode-badge">stopped</span>

@@ -175,6 +175,155 @@ test('3-tab dashboard structure below Target Site bar switches Control Center, S
   } finally { dom.window.close(); }
 });
 
+test('Prompt 8: Site Grid (Tab 2) collapsible A-E groups, 5 status badges, 3 session badges, group actions, and 102-site lag-free rendering', async () => {
+  const startedLists = [];
+  const stoppedLists = [];
+  const startedSingle = [];
+  const stoppedSingle = [];
+  const browserOpened = [];
+  const selectedTarget = [];
+  let stopAllCount = 0;
+
+  const mockSites = [
+    { id: 'talkwithstranger', name: 'TalkWithStranger', group: 'A', account_mode: 'auto_register', account_count: 1, has_saved_session: true, session_status: 'valid', start_url: 'https://talkwithstranger.com' },
+    { id: 'omezy', name: 'Omezy.io', group: 'B', account_mode: 'auto_register', account_count: 2, has_saved_session: true, session_status: 'expiring', start_url: 'https://omezy.io/text/' },
+    { id: 'chatib', name: 'Chatib.us', group: 'B', account_mode: 'auto_register', account_count: 0, has_saved_session: false, session_status: 'missing', start_url: 'https://www.chatib.us' },
+    { id: 'chitchat', name: 'ChitChat.gg', group: 'C', account_mode: 'browser_setup', account_count: 1, has_saved_session: true, session_status: 'valid', start_url: 'https://app.chitchat.gg/text?auth=email' },
+    { id: 'uhmegle', name: 'Uhmegle', group: 'D', account_mode: 'auto_register', account_count: 0, has_saved_session: false, session_status: 'missing', start_url: 'https://uhmegle.com/text' },
+    { id: 'emeraldchat', name: 'EmeraldChat', group: 'E', account_mode: 'browser_setup', account_count: 0, has_saved_session: false, session_status: 'missing', start_url: 'https://emeraldchat.com' },
+  ];
+
+  const mockStatuses = {
+    talkwithstranger: { site_id: 'talkwithstranger', status: 'running', running: true },
+    omezy: { site_id: 'omezy', status: 'paused', paused: true },
+    chatib: { site_id: 'chatib', status: 'failed', failed: true },
+    chitchat: { site_id: 'chitchat', status: 'paused', last_error_type: 'banned' },
+    uhmegle: { site_id: 'uhmegle', status: 'stopped' },
+    emeraldchat: { site_id: 'emeraldchat', status: 'stopped' },
+  };
+
+  const snap = snapshot({ active_site: 'chitchat', sites: mockSites });
+  const { dom, w, d } = setup({
+    GetSiteStatuses: async () => mockStatuses,
+    StartSites: async (list) => { startedLists.push(JSON.parse(JSON.stringify(list))); },
+    StopSites: async (list) => { stoppedLists.push(JSON.parse(JSON.stringify(list))); },
+    StartSite: async (id) => { startedSingle.push(id); },
+    StopSite: async (id) => { stoppedSingle.push(id); },
+    StopAll: async () => { stopAllCount += 1; },
+    RunSiteBrowser: async (id) => { browserOpened.push(id); },
+    SelectSite: async (id) => {
+      selectedTarget.push(id);
+      const found = mockSites.find((s) => s.id === id) || mockSites[0];
+      return found;
+    },
+  }, snap);
+
+  try {
+    w.bindTabs();
+    w.fillForms(snap);
+    await w.refreshSiteStatuses();
+    d.getElementById('dash-tab-site-manager').click();
+
+    // 1. Group-wise collapsible sections A/B/C/D/E with site count in each group header
+    const sections = [...d.querySelectorAll('#smgr-site-grid .smgr-group-section')];
+    assert.deepEqual(sections.map((s) => s.dataset.groupSection), ['A', 'B', 'C', 'D', 'E']);
+    assert.equal(d.querySelector('[data-group-count="A"]').textContent, '1 site');
+    assert.equal(d.querySelector('[data-group-count="B"]').textContent, '2 sites');
+    assert.equal(d.querySelector('[data-group-count="C"]').textContent, '1 site');
+
+    // Collapsible toggle works
+    d.querySelector('[data-group-toggle="B"]').click();
+    assert.equal(d.querySelector('[data-group-section="B"]').classList.contains('collapsed'), true);
+    d.querySelector('[data-group-toggle="B"]').click();
+    assert.equal(d.querySelector('[data-group-section="B"]').classList.contains('collapsed'), false);
+
+    // 2. Status badges: green=running, yellow=paused, red=failed, orange=banned, gray=stopped
+    assert.ok(d.querySelector('[data-status-badge="talkwithstranger"]').classList.contains('status-running'));
+    assert.ok(d.querySelector('[data-status-badge="omezy"]').classList.contains('status-paused'));
+    assert.ok(d.querySelector('[data-status-badge="chatib"]').classList.contains('status-failed'));
+    assert.ok(d.querySelector('[data-status-badge="chitchat"]').classList.contains('status-banned'));
+    assert.ok(d.querySelector('[data-status-badge="uhmegle"]').classList.contains('status-stopped'));
+
+    // 3. Session badges: ✅ valid, ⚠️ expiring, ❌ missing
+    assert.ok(d.querySelector('[data-session-badge="talkwithstranger"]').classList.contains('session-valid'));
+    assert.equal(d.querySelector('[data-session-badge="talkwithstranger"]').textContent, '✅ valid');
+    assert.ok(d.querySelector('[data-session-badge="omezy"]').classList.contains('session-expiring'));
+    assert.equal(d.querySelector('[data-session-badge="omezy"]').textContent, '⚠️ expiring');
+    assert.ok(d.querySelector('[data-session-badge="chatib"]').classList.contains('session-missing'));
+    assert.equal(d.querySelector('[data-session-badge="chatib"]').textContent, '❌ missing');
+
+    // 4. Group header actions: Select All, Start Group, Stop Group
+    d.querySelector('[data-group-select-all="B"]').click();
+    assert.equal(d.querySelector('[data-site-select-check="omezy"]').checked, true);
+    assert.equal(d.querySelector('[data-site-select-check="chatib"]').checked, true);
+    assert.equal(d.getElementById('smgr-selected-count').textContent, '2 site(s) selected');
+
+    d.querySelector('[data-group-start="B"]').click();
+    await tick();
+    assert.deepEqual(startedLists, [['omezy', 'chatib']]);
+
+    d.querySelector('[data-group-stop="B"]').click();
+    await tick();
+    assert.deepEqual(stoppedLists, [['omezy', 'chatib']]);
+
+    // 5. Per-site action buttons: Start, Stop, Open Browser, Detail + Site Name click opens Detail panel
+    d.querySelector('[data-smgr-start="talkwithstranger"]').click();
+    await tick();
+    assert.deepEqual(startedSingle, ['talkwithstranger']);
+
+    d.querySelector('[data-smgr-stop="talkwithstranger"]').click();
+    await tick();
+    assert.deepEqual(stoppedSingle, ['talkwithstranger']);
+
+    d.querySelector('[data-smgr-browser="omezy"]').click();
+    await tick();
+    assert.deepEqual(browserOpened, ['omezy']);
+
+    d.querySelector('[data-site-name="omezy"]').click();
+    await tick();
+    assert.ok(selectedTarget.includes('omezy'));
+    assert.equal(d.getElementById('smgr-site-detail').classList.contains('open'), true);
+
+    // 6. Status & Session filters and Bottom bar (Start All Selected, Stop All, Refresh)
+    const statusSelect = d.getElementById('smgr-filter-status');
+    statusSelect.value = 'banned';
+    statusSelect.dispatchEvent(new w.Event('change'));
+    assert.equal(d.querySelectorAll('#smgr-site-grid .smgr-site-row').length, 1);
+    statusSelect.value = 'all';
+    statusSelect.dispatchEvent(new w.Event('change'));
+
+    const sessionSelect = d.getElementById('smgr-filter-session');
+    sessionSelect.value = 'expiring';
+    sessionSelect.dispatchEvent(new w.Event('change'));
+    assert.equal(d.querySelectorAll('#smgr-site-grid .smgr-site-row').length, 1);
+    sessionSelect.value = 'all';
+    sessionSelect.dispatchEvent(new w.Event('change'));
+
+    d.getElementById('smgr-footer-start-selected-btn').click();
+    await tick();
+    assert.deepEqual(startedLists[startedLists.length - 1], ['omezy', 'chatib']);
+
+    d.getElementById('smgr-stop-all-btn').click();
+    await tick();
+    assert.equal(stopAllCount, 1);
+
+    // 7. Verify 102 sites render smoothly in < 100ms
+    const full102 = Array.from({ length: 102 }, (_, i) => ({
+      id: `site_${i + 1}`,
+      name: `Site ${i + 1}`,
+      group: ['A', 'B', 'C', 'D', 'E'][i % 5],
+      account_mode: 'auto_register',
+      has_saved_session: i % 2 === 0,
+      start_url: `https://site${i + 1}.example.com`,
+    }));
+    const t0 = Date.now();
+    w.fillForms(snapshot({ active_site: 'site_1', sites: full102 }));
+    const elapsedMs = Date.now() - t0;
+    assert.equal(d.querySelectorAll('#smgr-site-grid .smgr-site-row').length, 102);
+    assert.ok(elapsedMs < 500, `102 sites rendered in ${elapsedMs}ms`);
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {

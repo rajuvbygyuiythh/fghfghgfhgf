@@ -218,8 +218,9 @@ See root `../AGENTS.md` for the full verbatim specification of Prompts 1–16. E
 - **Prompt 5 (Site Runner Supervisor):** `[DONE — 0493e40]`
 - **Prompt 6 (Connect Supervisor to Existing Engine):** `[DONE — 38c2d98, da58842]`
 - **Prompt 7 (Dashboard 3-Tab Structure):** `[DONE — 45500f5]`
-- **Prompt 8 (Site Grid — Tab 2):** `[IN PROGRESS — Awaiting Plan Approval]`
-- **Prompts 9–16:** `[PENDING]`
+- **Prompt 8 (Site Grid — Tab 2):** `[DONE]`
+- **Prompt 9 (Per-Site Detail + Overrides):** `[IN PROGRESS — Awaiting Plan Approval]`
+- **Prompts 10–16:** `[PENDING]`
 
 * `test_flow.py` — the behaviour spec (checks mirrored in Go tests).
 

@@ -20,8 +20,12 @@ const state = {
   profiles: [],
   siteFilter: "all",
   smgrGroup: "ALL",
+  smgrStatusFilter: "all",
+  smgrSessionFilter: "all",
+  collapsedGroups: {},
   selectedSites: [],
   siteStatuses: {},
+  detailOpen: true,
   activeSub: { show: "show-setting", bot: "bg-login" },
   showLog: { after: 0, entries: [], pending: false },
   botLog: { after: 0, entries: [], pending: false },
@@ -810,6 +814,7 @@ function fillSites(snapshot) {
 
 function siteGroupCode(site) {
   if (!site) return "B";
+  if (site.group) return String(site.group).toUpperCase();
   if (site.classification_group) return String(site.classification_group).toUpperCase();
   if (site.classification && site.classification.group) return String(site.classification.group).toUpperCase();
   const id = String(site.id || "").toLowerCase();
@@ -817,6 +822,55 @@ function siteGroupCode(site) {
   if (id === "chitchat" || site.account_mode === "browser_setup") return "C";
   if (site.auth_mode === "guest_Socket" || site.auth_mode === "guest_api") return "A";
   return "B";
+}
+
+function groupDisplayTitle(grp) {
+  return {
+    A: "Group A · Browserless",
+    B: "Group B · Auto-Signup",
+    C: "Group C · Browser-Once",
+    D: "Group D · DOM-Only",
+    E: "Group E · Manual",
+  }[grp] || `Group ${grp}`;
+}
+
+function resolveSiteRunnerState(siteId) {
+  const st = state.siteStatuses[siteId] || {};
+  const raw = String(st.status || st.state || "").toLowerCase();
+  const errType = String(st.last_error_type || "").toLowerCase();
+  if (raw === "banned" || errType === "banned") return "banned";
+  if (raw === "running" || st.running) return "running";
+  if (raw === "failed" || st.failed || errType === "crash") return "failed";
+  if (raw === "paused" || st.paused || st.auto_paused) return "paused";
+  return "stopped";
+}
+
+function resolveSiteSessionState(site) {
+  if (!site) return "missing";
+  const explicit = String(site.session_status || "").toLowerCase();
+  if (explicit === "valid" || explicit === "expiring" || explicit === "missing") {
+    return explicit;
+  }
+  const st = state.siteStatuses[site.id] || {};
+  const errType = String(st.last_error_type || "").toLowerCase();
+  const hasSaved = Boolean(site.has_saved_session || Number(site.account_count || 0) > 0);
+  if (!hasSaved) return "missing";
+  if (errType === "auth expired") return "expiring";
+  const savedAt = String(site.session_saved_at || "").trim();
+  if (savedAt) {
+    if (savedAt.toLowerCase().includes("expir")) return "expiring";
+    const parsed = Date.parse(savedAt);
+    if (!Number.isNaN(parsed) && Date.now() - parsed > 20 * 3600 * 1000) {
+      return "expiring";
+    }
+  }
+  return "valid";
+}
+
+function sessionBadgeText(sessState) {
+  if (sessState === "valid") return "✅ valid";
+  if (sessState === "expiring") return "⚠️ expiring";
+  return "❌ missing";
 }
 
 function setSiteManagerGroup(group) {
@@ -833,7 +887,65 @@ function setSiteManagerGroup(group) {
     const btn = byId(btnId);
     if (btn) btn.classList.toggle("active", state.smgrGroup === g);
   }
+  const grpSelect = byId("smgr-filter-group");
+  if (grpSelect && grpSelect.value !== state.smgrGroup) {
+    grpSelect.value = state.smgrGroup;
+  }
   renderSiteManager();
+}
+
+function toggleGroupCollapse(groupCode) {
+  state.collapsedGroups[groupCode] = !state.collapsedGroups[groupCode];
+  renderSiteManager();
+}
+
+function toggleSelectAllInGroup(groupCode, siteIds) {
+  if (!Array.isArray(siteIds) || siteIds.length === 0) return;
+  const allSelected = siteIds.every((id) => state.selectedSites.includes(id));
+  if (allSelected) {
+    state.selectedSites = state.selectedSites.filter((id) => !siteIds.includes(id));
+  } else {
+    for (const id of siteIds) {
+      if (!state.selectedSites.includes(id)) {
+        state.selectedSites.push(id);
+      }
+    }
+  }
+  renderSiteManager();
+}
+
+async function startGroupSites(groupCode, siteIds) {
+  if (!Array.isArray(siteIds) || siteIds.length === 0) return;
+  try {
+    setStatus("smgr-status", `Starting Group ${groupCode} (${siteIds.length} sites)…`);
+    await invoke("StartSites", siteIds);
+    await refreshSiteStatuses();
+    setStatus("smgr-status", `Started Group ${groupCode} (${siteIds.length} sites).`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+async function stopGroupSites(groupCode, siteIds) {
+  if (!Array.isArray(siteIds) || siteIds.length === 0) return;
+  try {
+    setStatus("smgr-status", `Stopping Group ${groupCode} (${siteIds.length} sites)…`);
+    await invoke("StopSites", siteIds);
+    await refreshSiteStatuses();
+    setStatus("smgr-status", `Stopped Group ${groupCode} (${siteIds.length} sites).`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+async function openSiteDetailPanel(siteId) {
+  state.detailOpen = true;
+  const detailCard = byId("smgr-site-detail");
+  if (detailCard) {
+    detailCard.classList.remove("closed");
+    detailCard.classList.add("open");
+  }
+  await selectTargetSite(siteId);
 }
 
 function renderSiteDetail(activeObj) {
@@ -841,9 +953,8 @@ function renderSiteDetail(activeObj) {
   const siteId = activeObj.id || "chitchat";
   const group = siteGroupCode(activeObj);
   const accMode = siteAccountMode(activeObj);
-  const hasSaved = Boolean(activeObj.has_saved_session || Number(activeObj.account_count || 0) > 0);
-  const runnerInfo = state.siteStatuses[siteId] || {};
-  const runnerState = runnerInfo.state || "stopped";
+  const sessState = resolveSiteSessionState(activeObj);
+  const runnerState = resolveSiteRunnerState(siteId);
 
   const titleEl = byId("smgr-detail-title");
   const badgeEl = byId("smgr-detail-status-badge");
@@ -856,15 +967,13 @@ function renderSiteDetail(activeObj) {
   if (titleEl) titleEl.textContent = `${activeObj.name || siteId} (${siteId})`;
   if (badgeEl) {
     badgeEl.textContent = runnerState;
-    badgeEl.classList.toggle("live", runnerState === "running");
+    badgeEl.className = `smgr-status-badge status-${runnerState}`;
   }
   if (urlEl) urlEl.textContent = activeObj.start_url || "";
   if (folderEl) folderEl.textContent = `sites/${siteId}/`;
   if (groupEl) groupEl.textContent = `Group ${group} · ${accMode}`;
   if (sessionEl) {
-    sessionEl.textContent = hasSaved
-      ? `${activeObj.account_count || 1} saved in sites/${siteId}/sessions/`
-      : `0 saved in sites/${siteId}/sessions/`;
+    sessionEl.textContent = `${sessionBadgeText(sessState)} · ${activeObj.account_count || (sessState === "missing" ? 0 : 1)} saved in sites/${siteId}/sessions/`;
   }
   if (overrideEl) {
     overrideEl.textContent = activeObj.has_override
@@ -877,6 +986,7 @@ function renderSiteManager() {
   const grid = byId("smgr-site-grid");
   const countEl = byId("smgr-grid-count");
   const totalBadge = byId("smgr-total-badge");
+  const selCountEl = byId("smgr-selected-count");
   if (!grid) return;
 
   const sitesList = Array.isArray(state.snapshot?.sites) && state.snapshot.sites.length > 0
@@ -886,91 +996,194 @@ function renderSiteManager() {
   const searchEl = byId("smgr-search-input");
   const query = searchEl ? (searchEl.value || "").trim().toLowerCase() : "";
   const groupFilter = state.smgrGroup || "ALL";
+  const statusFilter = byId("smgr-filter-status")?.value || state.smgrStatusFilter || "all";
+  const sessionFilter = byId("smgr-filter-session")?.value || state.smgrSessionFilter || "all";
 
   if (totalBadge) totalBadge.textContent = `${sitesList.length} Isolated Sites`;
+  if (selCountEl) selCountEl.textContent = `${state.selectedSites.length} site(s) selected`;
 
-  const filtered = [];
+  const grouped = { A: [], B: [], C: [], D: [], E: [] };
+  let shownCount = 0;
+
   for (const s of sitesList) {
     const grp = siteGroupCode(s);
+    const rState = resolveSiteRunnerState(s.id);
+    const sessState = resolveSiteSessionState(s);
+
     if (groupFilter !== "ALL" && grp !== groupFilter) continue;
-    const hay = `${s.id || ""} ${s.name || ""} ${s.start_url || ""} group ${grp}`.toLowerCase();
+    if (statusFilter !== "all" && rState !== statusFilter) continue;
+    if (sessionFilter !== "all" && sessState !== sessionFilter) continue;
+    const hay = `${s.id || ""} ${s.name || ""} ${s.start_url || ""} group ${grp} ${rState} ${sessState}`.toLowerCase();
     if (query && !hay.includes(query)) continue;
-    filtered.push(s);
+
+    if (!grouped[grp]) grouped[grp] = [];
+    grouped[grp].push({ site: s, grp, rState, sessState });
+    shownCount += 1;
   }
 
-  if (countEl) countEl.textContent = `${filtered.length} of ${sitesList.length} sites shown`;
+  if (countEl) countEl.textContent = `${shownCount} of ${sitesList.length} sites shown`;
 
-  grid.replaceChildren();
-  for (const s of filtered) {
-    const grp = siteGroupCode(s);
-    const hasSaved = Boolean(s.has_saved_session || Number(s.account_count || 0) > 0);
-    const runnerInfo = state.siteStatuses[s.id] || {};
-    const rState = runnerInfo.state || "stopped";
-    const isChecked = state.selectedSites.includes(s.id);
+  const fragment = document.createDocumentFragment();
+  for (const grpCode of ["A", "B", "C", "D", "E"]) {
+    const items = grouped[grpCode] || [];
+    if (items.length === 0) continue;
+    const grpSiteIds = items.map((entry) => entry.site.id);
+    const isCollapsed = !!state.collapsedGroups[grpCode];
+    const allInGroupSelected = grpSiteIds.every((id) => state.selectedSites.includes(id));
 
-    const card = document.createElement("div");
-    card.className = "smgr-grid-item" + (s.id === activeId ? " active" : "");
-    card.dataset.siteCard = s.id;
+    const section = document.createElement("section");
+    section.className = "smgr-group-section" + (isCollapsed ? " collapsed" : "");
+    section.dataset.groupSection = grpCode;
 
-    const top = document.createElement("div");
-    top.className = "smgr-grid-top";
+    const header = document.createElement("div");
+    header.className = "smgr-group-header";
 
-    const checkLabel = document.createElement("label");
-    checkLabel.className = "checkbox-row";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = isChecked;
-    checkbox.dataset.siteSelectCheck = s.id;
-    checkbox.addEventListener("click", (e) => e.stopPropagation());
-    checkbox.addEventListener("change", (e) => {
-      if (e.target.checked) {
-        if (!state.selectedSites.includes(s.id)) state.selectedSites.push(s.id);
-      } else {
-        state.selectedSites = state.selectedSites.filter((id) => id !== s.id);
-      }
-    });
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "smgr-grid-name";
-    nameSpan.textContent = s.name || s.id;
-    checkLabel.append(checkbox, nameSpan);
+    const titleBtn = document.createElement("button");
+    titleBtn.type = "button";
+    titleBtn.className = "smgr-group-title-btn";
+    titleBtn.dataset.groupToggle = grpCode;
+    const arrowSpan = document.createElement("span");
+    arrowSpan.textContent = isCollapsed ? "▶" : "▼";
+    const titleSpan = document.createElement("span");
+    titleSpan.textContent = groupDisplayTitle(grpCode);
+    const countBadge = document.createElement("span");
+    countBadge.className = "smgr-group-count";
+    countBadge.dataset.groupCount = grpCode;
+    countBadge.textContent = `${items.length} site${items.length === 1 ? "" : "s"}`;
+    titleBtn.append(arrowSpan, titleSpan, countBadge);
+    titleBtn.addEventListener("click", () => toggleGroupCollapse(grpCode));
 
-    const grpBadge = document.createElement("span");
-    grpBadge.className = "site-session-badge" + (rState === "running" ? " saved" : "");
-    grpBadge.textContent = `G-${grp} · ${rState}`;
-    top.append(checkLabel, grpBadge);
+    const grpActions = document.createElement("div");
+    grpActions.className = "smgr-group-actions";
 
-    const meta = document.createElement("div");
-    meta.className = "smgr-grid-meta";
-    meta.textContent = `sites/${s.id}/ · ${hasSaved ? "✓ session" : "○ no session"}`;
+    const selectAllBtn = document.createElement("button");
+    selectAllBtn.type = "button";
+    selectAllBtn.className = "site-mini-btn";
+    selectAllBtn.dataset.groupSelectAll = grpCode;
+    selectAllBtn.textContent = allInGroupSelected ? "Unselect All" : "Select All";
+    selectAllBtn.addEventListener("click", () => toggleSelectAllInGroup(grpCode, grpSiteIds));
 
-    const actions = document.createElement("div");
-    actions.className = "smgr-grid-actions";
+    const startGrpBtn = document.createElement("button");
+    startGrpBtn.type = "button";
+    startGrpBtn.className = "site-mini-btn";
+    startGrpBtn.dataset.groupStart = grpCode;
+    startGrpBtn.textContent = "▶ Start Group";
+    startGrpBtn.addEventListener("click", () => startGroupSites(grpCode, grpSiteIds));
 
-    const startBtn = document.createElement("button");
-    startBtn.type = "button";
-    startBtn.className = "site-mini-btn";
-    startBtn.dataset.smgrStart = s.id;
-    startBtn.textContent = "▶ Start";
-    startBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      startSingleSiteRunner(s.id);
-    });
+    const stopGrpBtn = document.createElement("button");
+    stopGrpBtn.type = "button";
+    stopGrpBtn.className = "site-mini-btn";
+    stopGrpBtn.dataset.groupStop = grpCode;
+    stopGrpBtn.textContent = "■ Stop Group";
+    stopGrpBtn.addEventListener("click", () => stopGroupSites(grpCode, grpSiteIds));
 
-    const stopBtn = document.createElement("button");
-    stopBtn.type = "button";
-    stopBtn.className = "site-mini-btn";
-    stopBtn.dataset.smgrStop = s.id;
-    stopBtn.textContent = "■ Stop";
-    stopBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      stopSingleSiteRunner(s.id);
-    });
+    grpActions.append(selectAllBtn, startGrpBtn, stopGrpBtn);
+    header.append(titleBtn, grpActions);
 
-    actions.append(startBtn, stopBtn);
-    card.append(top, meta, actions);
-    card.addEventListener("click", () => selectTargetSite(s.id));
-    grid.appendChild(card);
+    const body = document.createElement("div");
+    body.className = "smgr-group-body";
+
+    for (const { site: s, rState, sessState } of items) {
+      const isChecked = state.selectedSites.includes(s.id);
+      const row = document.createElement("div");
+      row.className = "smgr-grid-item smgr-site-row" + (s.id === activeId ? " active" : "");
+      row.dataset.siteCard = s.id;
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = isChecked;
+      checkbox.dataset.siteSelectCheck = s.id;
+      checkbox.setAttribute("aria-label", `Select ${s.name || s.id}`);
+      checkbox.addEventListener("click", (e) => e.stopPropagation());
+      checkbox.addEventListener("change", (e) => {
+        if (e.target.checked) {
+          if (!state.selectedSites.includes(s.id)) state.selectedSites.push(s.id);
+        } else {
+          state.selectedSites = state.selectedSites.filter((id) => id !== s.id);
+        }
+        if (selCountEl) selCountEl.textContent = `${state.selectedSites.length} site(s) selected`;
+      });
+
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "smgr-site-name-btn";
+      nameBtn.dataset.siteName = s.id;
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "smgr-grid-name";
+      nameSpan.textContent = s.name || s.id;
+      const metaSpan = document.createElement("span");
+      metaSpan.className = "smgr-grid-meta";
+      metaSpan.textContent = `sites/${s.id}/ · ${s.start_url || ""}`;
+      nameBtn.append(nameSpan, metaSpan);
+      nameBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openSiteDetailPanel(s.id);
+      });
+
+      const statusBadge = document.createElement("span");
+      statusBadge.className = `smgr-status-badge status-${rState}`;
+      statusBadge.dataset.statusBadge = s.id;
+      statusBadge.textContent = rState;
+
+      const sessionBadge = document.createElement("span");
+      sessionBadge.className = `smgr-session-badge session-${sessState}`;
+      sessionBadge.dataset.sessionBadge = s.id;
+      sessionBadge.textContent = sessionBadgeText(sessState);
+
+      const actions = document.createElement("div");
+      actions.className = "smgr-grid-actions";
+
+      const startBtn = document.createElement("button");
+      startBtn.type = "button";
+      startBtn.className = "site-mini-btn";
+      startBtn.dataset.smgrStart = s.id;
+      startBtn.textContent = "Start";
+      startBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        startSingleSiteRunner(s.id);
+      });
+
+      const stopBtn = document.createElement("button");
+      stopBtn.type = "button";
+      stopBtn.className = "site-mini-btn";
+      stopBtn.dataset.smgrStop = s.id;
+      stopBtn.textContent = "Stop";
+      stopBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        stopSingleSiteRunner(s.id);
+      });
+
+      const browserBtn = document.createElement("button");
+      browserBtn.type = "button";
+      browserBtn.className = "site-mini-btn";
+      browserBtn.dataset.smgrBrowser = s.id;
+      browserBtn.textContent = "Open Browser";
+      browserBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        runSiteBrowserFor(s.id);
+      });
+
+      const detailBtn = document.createElement("button");
+      detailBtn.type = "button";
+      detailBtn.className = "site-mini-btn";
+      detailBtn.dataset.smgrDetail = s.id;
+      detailBtn.textContent = "Detail";
+      detailBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openSiteDetailPanel(s.id);
+      });
+
+      actions.append(startBtn, stopBtn, browserBtn, detailBtn);
+      row.append(checkbox, nameBtn, statusBadge, sessionBadge, actions);
+      row.addEventListener("click", () => openSiteDetailPanel(s.id));
+      body.appendChild(row);
+    }
+
+    section.append(header, body);
+    fragment.appendChild(section);
   }
+
+  grid.replaceChildren(fragment);
 
   const activeObj = sitesList.find((s) => s.id === activeId) || sitesList[0];
   renderSiteDetail(activeObj);
@@ -991,10 +1204,11 @@ function renderSessionsTab() {
   let runningCount = 0;
   let issueCount = 0;
   for (const s of sitesList) {
-    if (s.has_saved_session || Number(s.account_count || 0) > 0) savedCount += 1;
-    const st = state.siteStatuses[s.id];
-    if (st && st.state === "running") runningCount += 1;
-    if (st && (st.state === "paused" || st.state === "failed" || Number(st.error_count || 0) > 0)) issueCount += 1;
+    const sessState = resolveSiteSessionState(s);
+    const rState = resolveSiteRunnerState(s.id);
+    if (sessState === "valid") savedCount += 1;
+    if (rState === "running") runningCount += 1;
+    if (rState === "paused" || rState === "failed" || rState === "banned" || sessState === "expiring") issueCount += 1;
   }
 
   const totalEl = byId("sess-stat-total");
@@ -1009,8 +1223,7 @@ function renderSessionsTab() {
   listEl.replaceChildren();
   for (const s of sitesList) {
     const hasSaved = Boolean(s.has_saved_session || Number(s.account_count || 0) > 0);
-    const st = state.siteStatuses[s.id] || {};
-    const rState = st.state || "stopped";
+    const rState = resolveSiteRunnerState(s.id);
     const row = document.createElement("div");
     row.className = "site-session-row";
     row.dataset.sessionHealthRow = s.id;
@@ -1061,8 +1274,8 @@ async function refreshSiteStatuses() {
     const statuses = await invoke("GetSiteStatuses");
     state.siteStatuses = statuses && typeof statuses === "object" ? statuses : {};
     let runningNow = 0;
-    for (const st of Object.values(state.siteStatuses)) {
-      if (st && st.state === "running") runningNow += 1;
+    for (const siteId of Object.keys(state.siteStatuses)) {
+      if (resolveSiteRunnerState(siteId) === "running") runningNow += 1;
     }
     const multiEl = byId("cc-multi-status");
     if (multiEl) {
@@ -1087,11 +1300,15 @@ async function startAllSitesRunner() {
 async function stopAllSitesRunner() {
   try {
     setStatus("cc-multi-status", "Stopping all site runners…");
+    setStatus("smgr-status", "Stopping all site runners…");
     await invoke("StopAll");
     await refreshSiteStatuses();
     setStatus("cc-multi-status", "All site runners stopped.", "ok");
+    setStatus("smgr-status", "All site runners stopped.", "ok");
   } catch (error) {
-    setStatus("cc-multi-status", error.message || String(error), "error");
+    const msg = error.message || String(error);
+    setStatus("cc-multi-status", msg, "error");
+    setStatus("smgr-status", msg, "error");
   }
 }
 
@@ -1803,18 +2020,42 @@ function bindActions() {
   const smgrSearch = byId("smgr-search-input");
   if (smgrSearch) smgrSearch.addEventListener("input", () => renderSiteManager());
 
-  const smgrStartSel = byId("smgr-start-selected-btn");
-  const smgrStopSel = byId("smgr-stop-selected-btn");
-  const smgrRefresh = byId("smgr-refresh-btn");
-  if (smgrStartSel) smgrStartSel.addEventListener("click", startSelectedSitesRunner);
-  if (smgrStopSel) smgrStopSel.addEventListener("click", stopSelectedSitesRunner);
-  if (smgrRefresh) {
-    smgrRefresh.addEventListener("click", async () => {
-      await refreshState();
-      await refreshSiteStatuses();
-      setStatus("smgr-status", "Site Manager refreshed.", "ok");
+  const smgrFilterGroup = byId("smgr-filter-group");
+  const smgrFilterStatus = byId("smgr-filter-status");
+  const smgrFilterSession = byId("smgr-filter-session");
+  if (smgrFilterGroup) {
+    smgrFilterGroup.addEventListener("change", (e) => setSiteManagerGroup(e.target.value));
+  }
+  if (smgrFilterStatus) {
+    smgrFilterStatus.addEventListener("change", (e) => {
+      state.smgrStatusFilter = e.target.value || "all";
+      renderSiteManager();
     });
   }
+  if (smgrFilterSession) {
+    smgrFilterSession.addEventListener("change", (e) => {
+      state.smgrSessionFilter = e.target.value || "all";
+      renderSiteManager();
+    });
+  }
+
+  const smgrStartSel = byId("smgr-start-selected-btn");
+  const smgrFooterStartSel = byId("smgr-footer-start-selected-btn");
+  const smgrStopSel = byId("smgr-stop-selected-btn");
+  const smgrStopAll = byId("smgr-stop-all-btn");
+  const smgrRefresh = byId("smgr-refresh-btn");
+  const smgrFooterRefresh = byId("smgr-footer-refresh-btn");
+  if (smgrStartSel) smgrStartSel.addEventListener("click", startSelectedSitesRunner);
+  if (smgrFooterStartSel) smgrFooterStartSel.addEventListener("click", startSelectedSitesRunner);
+  if (smgrStopSel) smgrStopSel.addEventListener("click", stopSelectedSitesRunner);
+  if (smgrStopAll) smgrStopAll.addEventListener("click", stopAllSitesRunner);
+  const doSmgrRefresh = async () => {
+    await refreshState();
+    await refreshSiteStatuses();
+    setStatus("smgr-status", "Site Manager refreshed.", "ok");
+  };
+  if (smgrRefresh) smgrRefresh.addEventListener("click", doSmgrRefresh);
+  if (smgrFooterRefresh) smgrFooterRefresh.addEventListener("click", doSmgrRefresh);
 
   const smgrDetailStart = byId("smgr-detail-start");
   const smgrDetailStop = byId("smgr-detail-stop");
@@ -1861,6 +2102,13 @@ function bindEvents() {
   if (typeof runtime.EventsOn !== "function") return;
   runtime.EventsOn("ui:showlog", () => refreshShowLog());
   runtime.EventsOn("ui:botlog", () => refreshBotLog());
+  runtime.EventsOn("ui:site_statuses", (statuses) => {
+    if (statuses && typeof statuses === "object") {
+      state.siteStatuses = statuses;
+      if (state.dashTab === "site-manager") renderSiteManager();
+      if (state.dashTab === "sessions") renderSessionsTab();
+    }
+  });
   runtime.EventsOn("ui:show_running", (running) => {
     state.runningShow = !!running;
     renderRunning();
@@ -1890,7 +2138,9 @@ async function bootstrap() {
     attempts += 1;
     try {
       await refreshState();
+      await refreshSiteStatuses();
       setInterval(refreshStatsOnly, 3000);
+      setInterval(refreshSiteStatuses, 5000);
       setInterval(refreshProfiles, 10000);
       setInterval(() => { if (state.tab === "show") refreshShowLog(); }, 1000);
       setInterval(() => { if (state.tab === "bot") refreshBotLog(); }, 1000);

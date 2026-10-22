@@ -122,6 +122,7 @@ type SiteOption struct {
 	AccountMode     string `json:"account_mode"`
 	AccountCount    int    `json:"account_count"`
 	HasSavedSession bool   `json:"has_saved_session"`
+	SessionStatus   string `json:"session_status,omitempty"`
 	SessionSavedAt  string `json:"session_saved_at,omitempty"`
 	SessionPath     string `json:"session_path,omitempty"`
 	StartURL        string `json:"start_url"`
