@@ -1375,27 +1375,27 @@ func (a *App) ListSiteSettings() ([]settings.SiteSummary, error) {
 // SiteDetailView holds the complete per-site detail payload for the right-side
 // slide-out panel in Site Manager (Prompt 9).
 type SiteDetailView struct {
-	SiteID            string             `json:"site_id"`
-	Name              string             `json:"name"`
-	StartURL          string             `json:"start_url"`
-	Group             string             `json:"group"`
-	GroupName         string             `json:"group_name"`
-	ConnectionType    string             `json:"connection_type"`
-	AccountMode       string             `json:"account_mode"`
-	AccountCount      int                `json:"account_count"`
-	SessionStatus     string             `json:"session_status"`
-	SessionCapturedAt string             `json:"session_captured_at,omitempty"`
-	SessionExpiresAt  string             `json:"session_expires_at,omitempty"`
-	SessionPath       string             `json:"session_path,omitempty"`
-	FolderPath        string             `json:"folder_path"`
-	RunnerStatus      string             `json:"runner_status"`
-	Running           bool               `json:"running"`
-	MessagesSent      int                `json:"messages_sent"`
-	MessagesReceived  int                `json:"messages_received"`
-	UptimeSeconds     int                `json:"uptime_seconds"`
-	UptimeText        string             `json:"uptime_text"`
-	ErrorCount        int                `json:"error_count"`
-	ConsecutiveErrors int                `json:"consecutive_errors"`
+	SiteID               string             `json:"site_id"`
+	Name                 string             `json:"name"`
+	StartURL             string             `json:"start_url"`
+	Group                string             `json:"group"`
+	GroupName            string             `json:"group_name"`
+	ConnectionType       string             `json:"connection_type"`
+	AccountMode          string             `json:"account_mode"`
+	AccountCount         int                `json:"account_count"`
+	SessionStatus        string             `json:"session_status"`
+	SessionCapturedAt    string             `json:"session_captured_at,omitempty"`
+	SessionExpiresAt     string             `json:"session_expires_at,omitempty"`
+	SessionPath          string             `json:"session_path,omitempty"`
+	FolderPath           string             `json:"folder_path"`
+	RunnerStatus         string             `json:"runner_status"`
+	Running              bool               `json:"running"`
+	MessagesSent         int                `json:"messages_sent"`
+	MessagesReceived     int                `json:"messages_received"`
+	UptimeSeconds        int                `json:"uptime_seconds"`
+	UptimeText           string             `json:"uptime_text"`
+	ErrorCount           int                `json:"error_count"`
+	ConsecutiveErrors    int                `json:"consecutive_errors"`
 	LastError            string             `json:"last_error,omitempty"`
 	LastErrorType        string             `json:"last_error_type,omitempty"`
 	RecoveryStatus       string             `json:"recovery_status,omitempty"`
@@ -1484,27 +1484,27 @@ func (a *App) GetSiteDetail(siteID string) (SiteDetailView, error) {
 	eff = eff.Redacted()
 
 	return SiteDetailView{
-		SiteID:            cfg.ID,
-		Name:              cfg.Name,
-		StartURL:          cfg.StartURL,
-		Group:             cfg.Classification.Group,
-		GroupName:         cfg.Classification.GroupName,
-		ConnectionType:    connType,
-		AccountMode:       cfg.AccountMode,
-		AccountCount:      cfg.AccountCount,
-		SessionStatus:     sessStatus,
-		SessionCapturedAt: capturedAt,
-		SessionExpiresAt:  expiresAt,
-		SessionPath:       cfg.SessionPath,
-		FolderPath:        cfg.FolderPath,
-		RunnerStatus:      runnerState,
-		Running:           st.Running,
-		MessagesSent:      st.Stats.MessagesSent,
-		MessagesReceived:  st.Stats.MessagesReceived,
-		UptimeSeconds:     uptimeSec,
-		UptimeText:        formatUptime(uptimeSec),
-		ErrorCount:        st.TotalErrors,
-		ConsecutiveErrors: st.ConsecutiveErrors,
+		SiteID:               cfg.ID,
+		Name:                 cfg.Name,
+		StartURL:             cfg.StartURL,
+		Group:                cfg.Classification.Group,
+		GroupName:            cfg.Classification.GroupName,
+		ConnectionType:       connType,
+		AccountMode:          cfg.AccountMode,
+		AccountCount:         cfg.AccountCount,
+		SessionStatus:        sessStatus,
+		SessionCapturedAt:    capturedAt,
+		SessionExpiresAt:     expiresAt,
+		SessionPath:          cfg.SessionPath,
+		FolderPath:           cfg.FolderPath,
+		RunnerStatus:         runnerState,
+		Running:              st.Running,
+		MessagesSent:         st.Stats.MessagesSent,
+		MessagesReceived:     st.Stats.MessagesReceived,
+		UptimeSeconds:        uptimeSec,
+		UptimeText:           formatUptime(uptimeSec),
+		ErrorCount:           st.TotalErrors,
+		ConsecutiveErrors:    st.ConsecutiveErrors,
 		LastError:            st.LastError,
 		LastErrorType:        st.LastErrorType,
 		RecoveryStatus:       st.RecoveryStatus,
@@ -1529,7 +1529,7 @@ func (a *App) RecoverSite(siteID string, errorType string) (runner.RecoveryRepor
 	if err != nil || rep.NeedsHuman || rep.Status == runner.RecoveryStatusFailed {
 		kind = "error"
 	}
-	a.recordCombinedLog(siteID, kind, fmt.Sprintf("Self-Recovery [Scenario %s] (%d/%d): %s", rep.Scenario, rep.Attempts, rep.MaxAttempts, rep.Message), rep.ErrorType)
+	a.recordCombinedLog(siteID, kind, fmt.Sprintf("Self-Recovery [Scenario %s] (%d/%d): %s", rep.Scenario, rep.Attempt, rep.MaxAttempts, rep.Message), rep.ErrorType)
 	a.emit("ui:recovery", rep)
 	a.emit("ui:site_statuses", a.GetSiteStatuses())
 	if err != nil {
@@ -1646,8 +1646,8 @@ func (a *App) GetErrorDashboardSummary() ErrorDashboardSummary {
 			recStatus = rec.Status
 		}
 		recAttempts := st.RecoveryAttempts
-		if hasRec && rec.Attempts > recAttempts {
-			recAttempts = rec.Attempts
+		if hasRec && rec.Attempt > recAttempts {
+			recAttempts = rec.Attempt
 		}
 		recScenario := st.LastRecoveryScenario
 		if hasRec && rec.Scenario != "" {
@@ -2068,9 +2068,9 @@ func (a *App) GenerateFullMultiSiteReport() (FullMultiSiteReport, error) {
 		PausedSites:           pausedSites,
 		FailedSites:           failedSites,
 		NeedsHumanSites:       errDash.SitesNeedingHuman,
-		ValidSessions:         sessOverview.ValidCount,
-		ExpiringSessions:      sessOverview.ExpiringCount,
-		MissingSessions:       sessOverview.MissingCount,
+		ValidSessions:         sessOverview.Valid,
+		ExpiringSessions:      sessOverview.Expiring,
+		MissingSessions:       sessOverview.Missing,
 		GroupCounts:           groupCounts,
 		TotalMessagesSent:     sentTotal,
 		TotalMessagesReceived: recvTotal,
@@ -2167,7 +2167,7 @@ func (a *App) WizardProbeURL(name string, rawURL string) (WizardProbeResult, err
 		accountMode = sites.AccountModeBrowserSetup
 	}
 
-	groupDef := sites.GroupByID(group)
+	groupName := sites.GroupName(group)
 	var stepNames []string
 	if recipe, err := sites.LoadRecipe(a.dataDir, group); err == nil {
 		for _, st := range recipe.Steps {
@@ -2182,7 +2182,7 @@ func (a *App) WizardProbeURL(name string, rawURL string) (WizardProbeResult, err
 		SiteName:    cleanName,
 		StartURL:    cleanURL,
 		Group:       group,
-		GroupName:   groupDef.Name,
+		GroupName:   groupName,
 		Confidence:  confidence,
 		Reason:      reason,
 		AccountMode: accountMode,
@@ -2200,7 +2200,7 @@ func (a *App) WizardCreateAndSetupSite(name string, rawURL string, group string)
 	}
 	if g := strings.ToUpper(strings.TrimSpace(group)); g != "" {
 		probe.Group = g
-		probe.GroupName = sites.GroupByID(g).Name
+		probe.GroupName = sites.GroupName(g)
 	}
 
 	cfg, createErr := sites.CreateSiteWithMode(a.dataDir, probe.SiteName, probe.StartURL, probe.AccountMode)
@@ -2225,6 +2225,11 @@ func (a *App) WizardCreateAndSetupSite(name string, rawURL string, group string)
 		Group: probe.Group,
 	})
 
+	var stepLogs []sites.RecipeStepLog
+	for _, att := range recipeRes.Attempts {
+		stepLogs = append(stepLogs, att.StepResults...)
+	}
+
 	finalGroup := probe.Group
 	finalGroupName := probe.GroupName
 	if recipeRes.FinalGroup != "" {
@@ -2237,7 +2242,7 @@ func (a *App) WizardCreateAndSetupSite(name string, rawURL string, group string)
 	nextActionLabel := "Start Site Now"
 
 	switch {
-	case recipeErr != nil && len(recipeRes.StepLogs) == 0:
+	case recipeErr != nil && len(stepLogs) == 0:
 		resultStatus = "failed"
 		nextAction = "retry_setup"
 		nextActionLabel = "Retry Setup"
@@ -2264,7 +2269,7 @@ func (a *App) WizardCreateAndSetupSite(name string, rawURL string, group string)
 		GroupName:       finalGroupName,
 		Confidence:      probe.Confidence,
 		ResultStatus:    resultStatus,
-		Steps:           recipeRes.StepLogs,
+		Steps:           stepLogs,
 		NextAction:      nextAction,
 		NextActionLabel: nextActionLabel,
 		Summary:         summary,

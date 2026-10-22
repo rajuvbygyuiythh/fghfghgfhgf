@@ -14,7 +14,7 @@ import (
 	"chitchatbot/internal/bot"
 	"chitchatbot/internal/browser"
 	"chitchatbot/internal/model"
-	"chitchat-wails/internal/sites"
+	"chitchatbot/internal/sites"
 )
 
 var (
@@ -200,7 +200,10 @@ func ConnectBrowserlessSite(dataDir, siteID string) (*BrowserlessConnection, err
 		wsURL = strings.TrimSpace(bundle.WSEndpoints.Endpoints[0])
 	}
 	if wsURL == "" {
-		wsList := cfg.Classification.DiscoveredEndpoints.WebSocketURLs
+		var wsList []string
+		if cfg.Classification.Probe != nil {
+			wsList = cfg.Classification.Probe.WebSocketEndpoints
+		}
 		if len(wsList) > 0 {
 			wsURL = wsList[0]
 		} else {

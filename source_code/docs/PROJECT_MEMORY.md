@@ -9,10 +9,10 @@ after every meaningful change** (newest last). Never rewrite old entries.
 <!-- AUTO:BEGIN -->
 _Auto status 2026-10-22. Do not edit this block by hand._
 
-- Source fingerprint: `cfd0d1aa98c0e263…`
+- Source fingerprint: `4686dbd5cb8401a4…`
 - Browser options: `rod`, `chromedp`, `show_mode`
 - Capture tool: v1.2.1
-- Last verification: no report found yet (`npm run verify`)
+- Last verification: **BLOCKED** (PASS 10, FAIL 0, BLOCKED 3) — BLOCKED is not PASS; see `verification-output/report.json`
 <!-- AUTO:END -->
 
 ## Decision log

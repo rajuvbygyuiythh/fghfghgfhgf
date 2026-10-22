@@ -179,6 +179,11 @@ func (s *Store) LoadOverride(siteID string) (Override, error) {
 	return loaded.Normalize(), nil
 }
 
+// LoadSiteOverride is an alias for LoadOverride used by per-site detail views.
+func (s *Store) LoadSiteOverride(siteID string) (Override, error) {
+	return s.LoadOverride(siteID)
+}
+
 // SaveOverride stores a per-site override. An all-nil override deletes the file
 // instead of persisting an empty object, so "no override" has exactly one
 // representation on disk.

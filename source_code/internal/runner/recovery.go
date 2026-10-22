@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"chitchat-wails/internal/sites"
+	"chitchatbot/internal/sites"
 )
 
 const (
@@ -30,8 +30,8 @@ const (
 	RecoveryStatusNeedsHuman  = "needs_human"
 	RecoveryStatusFailed      = "failed"
 
-	StatusNeedsHuman      = "needs_human"
-	RecoveryLogFileName   = "recovery.jsonl"
+	StatusNeedsHuman    = "needs_human"
+	RecoveryLogFileName = "recovery.jsonl"
 )
 
 // ErrNeedsHuman is returned when a site has exhausted all 3 auto-recovery attempts (Prompt 12).

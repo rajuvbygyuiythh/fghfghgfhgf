@@ -104,6 +104,26 @@ func (e Effective) Redacted() Effective {
 	return out
 }
 
+// Redacted returns a copy of the override with credentials masked.
+func (o Override) Redacted() Override {
+	out := o
+	if o.API != nil {
+		redactedAPI := o.API.Redacted()
+		out.API = &redactedAPI
+	}
+	if o.Proxy != nil {
+		redactedProxy := *o.Proxy
+		redactedProxy.Entries = maskProxyEntries(redactedProxy.Entries)
+		out.Proxy = &redactedProxy
+	}
+	return out
+}
+
+// IsEmpty is an alias for IsZero used by dashboard views.
+func (o Override) IsEmpty() bool {
+	return o.IsZero()
+}
+
 // maskProxyEntries hides credentials in a proxy list while keeping host:port
 // visible, which is what makes a support screenshot useful.
 func maskProxyEntries(entries string) string {

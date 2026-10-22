@@ -42,7 +42,7 @@ Every agent working on this project MUST follow this strict 4-step workflow for 
 | **Prompt 13** | Phase 5: Self-Recovery + Polish | Combined Live Log + Error Dashboard | 🟡 Medium | ✅ **DONE** (`2f932af`) | `source_code/app.go`, `show_log.go`, `bot_log.go`, `internal/model/ui.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
 | **Prompt 14** | Phase 5: Self-Recovery + Polish | Bulk Operations + Add Site Wizard | 🟢 Nice-to-have | ✅ **DONE** (`0a0aee2`) | `source_code/app.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
 | **Prompt 15** | Phase 6: Final | Settings Sync + Cleanup + Docs | 🟡 Medium | ✅ **DONE** | `source_code/app.go`, `cmd/apichat/main.go`, `docs/PROJECT_MAP.md`, `docs/MULTISITE_GUIDE.md`, `tests/contracts.test.cjs` |
-| **Prompt 16** | Phase 6: Final | Full Integration Test + Final EXE Build | 🔴 Critical | ⏳ **IN PROGRESS (Awaiting Approval)** | `source_code/integration_test.go`, `tests/*.test.cjs`, `verify.bat` |
+| **Prompt 16** | Phase 6: Final | Full Integration Test + Final EXE Build | 🔴 Critical | ✅ **DONE** (`integration_test.go`) | `source_code/integration_test.go`, `tests/*.test.cjs`, `verify.bat` |
 
 ---
 
@@ -216,7 +216,7 @@ Every agent working on this project MUST follow this strict 4-step workflow for 
 - Go side: `RecoveryManager` struct with `RecoverSite(siteID, errorType)` integrated with `Supervisor`
 - UI side: Recovery progress indicator, captcha notification, recovery success/fail notification
 
-#### Prompt 13 — Combined Live Log + Error Dashboard `[PENDING]`
+#### Prompt 13 — Combined Live Log + Error Dashboard `[DONE — 2f932af]`
 - Bottom bar (সব tab এ visible):
   - Combined log feed — সব site এর log একসাথে (`timestamp + site name (color coded by group) + type (OUT/IN/ERR/SYS) + message`)
   - Filter: by site, by type, by group
@@ -224,7 +224,7 @@ Every agent working on this project MUST follow this strict 4-step workflow for 
 - Go side: log event এ `siteID` field add করো
 - Error summary in Control Center: Per site error count, Error type breakdown (`connection`/`auth`/`ban`/`captcha`/`timeout`), Sites needing attention list, Recovery status per site
 
-#### Prompt 14 — Bulk Operations + Add Site Wizard `[PENDING]`
+#### Prompt 14 — Bulk Operations + Add Site Wizard `[DONE — 0a0aee2]`
 - Bulk operations (Control Center এ):
   - `Start All Ready`, `Stop All`, `Auto-Register All Group B`, `Login All Group C` (batch 5), `Refresh All Sessions`, `Full Report`
   - Parallel execution (max 10 concurrent) + progress bar + individual failure resilience
@@ -235,13 +235,13 @@ Every agent working on this project MUST follow this strict 4-step workflow for 
 
 ### PHASE 6: FINAL
 
-#### Prompt 15 — Settings Sync + Cleanup `[PENDING]`
+#### Prompt 15 — Settings Sync + Cleanup `[DONE — f52c042]`
 - Main dashboard এবং `apichat.exe` এর মধ্যে settings sync (`sites/_global/settings.json` ↔ `apichat.exe`)
 - Unused RPC methods cleanup
 - ১০২টা site folder verification (`site.json`, `classification`, `accounts`, `sessions`, `profiles`, `logs`, isolation rule)
 - `docs/PROJECT_MAP.md` update এবং `docs/MULTISITE_GUIDE.md` তৈরি
 
-#### Prompt 16 — Full Integration Test `[PENDING]`
+#### Prompt 16 — Full Integration Test `[DONE]`
 - ৩টা mock site (Group A, B, C) add করে end-to-end integration test:
   - Isolated goroutine start, single-site crash isolation, global settings pickup, per-site override isolation, session capture mock, browserless connection mock, self-recovery mock, cross-site access block
 - `go test ./...`, `npm test`, `verify.bat`, এবং `chitchatui.exe` + `apichat.exe` final build verification

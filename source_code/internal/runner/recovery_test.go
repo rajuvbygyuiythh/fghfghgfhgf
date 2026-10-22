@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"chitchat-wails/internal/sites"
+	"chitchatbot/internal/sites"
 )
 
 func TestPrompt12SelfRecoveryScenariosAtoEAndNeedsHumanLimit(t *testing.T) {

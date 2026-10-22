@@ -305,8 +305,8 @@ type SessionHealthOverview struct {
 }
 
 func defaultWSEndpointsForSite(cfg Config) []string {
-	if len(cfg.Classification.DiscoveredEndpoints.WebSocketURLs) > 0 {
-		return append([]string(nil), cfg.Classification.DiscoveredEndpoints.WebSocketURLs...)
+	if cfg.Classification.Probe != nil && len(cfg.Classification.Probe.WebSocketEndpoints) > 0 {
+		return append([]string(nil), cfg.Classification.Probe.WebSocketEndpoints...)
 	}
 	u := strings.TrimSpace(cfg.StartURL)
 	if u == "" {
@@ -361,7 +361,7 @@ func writeStructuredSessionBundle(
 	}
 
 	if len(wsEndpoints) == 0 {
-		if cfg, cfgErr := LoadSite(filepath.Dir(ctx.SitesRoot), ctx.SiteID); cfgErr == nil {
+		if cfg, cfgErr := LoadSite(ctx.DataDir, ctx.SiteID); cfgErr == nil {
 			wsEndpoints = defaultWSEndpointsForSite(cfg)
 		}
 	}
@@ -719,4 +719,3 @@ func GetAllSessionStatuses(dataDir string) (SessionHealthOverview, error) {
 	}
 	return overview, nil
 }
-

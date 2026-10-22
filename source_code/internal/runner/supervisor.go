@@ -174,7 +174,7 @@ func ClassifyRunnerError(err error) string {
 //   - "api"       -> internal/bot/api_chat.go & logic.go
 //   - "dom"       -> internal/browser/domchat.go
 func ResolveSiteTransport(siteCfg sites.Config, botCfg bot.Config, useLiveBrowser bool) string {
-	if useLiveBrowser {
+	if useLiveBrowser || strings.EqualFold(strings.TrimSpace(siteCfg.Classification.ChatMethod), "dom") {
 		return TransportDOM
 	}
 	hasWSProbe := siteCfg.Classification.Probe != nil && siteCfg.Classification.Probe.HasWebSocket
@@ -222,31 +222,31 @@ type SiteStats struct {
 
 // SiteStatus reports the current status, error state, and stats of one isolated site runner.
 type SiteStatus struct {
-	SiteID            string         `json:"site_id"`
-	SiteName          string         `json:"site_name"`
-	Group             string         `json:"group"`
-	GroupName         string         `json:"group_name"`
-	Transport         string         `json:"transport"`
-	Status            string         `json:"status"` // "idle", "starting", "running", "paused", "stopping", "stopped", "failed"
-	Running           bool           `json:"running"`
-	Paused            bool           `json:"paused"`
-	AutoPaused        bool           `json:"auto_paused"`
-	Failed            bool           `json:"failed"`
-	PauseReason       string         `json:"pause_reason,omitempty"`
-	ChatMode          string         `json:"chat_mode"`
-	Profile           string         `json:"profile"`
-	FolderPath        string         `json:"folder_path"`
-	SessionPath       string         `json:"session_path,omitempty"`
-	BotStatePath      string         `json:"bot_state_path,omitempty"`
-	ChatHistoryPath   string         `json:"chat_history_path,omitempty"`
-	LogPath           string         `json:"log_path"`
-	ErrorLogPath      string         `json:"error_log_path"`
-	ConsecutiveErrors int            `json:"consecutive_errors"`
-	TotalErrors       int            `json:"total_errors"`
-	ErrorCounts       map[string]int `json:"error_counts"`
-	LastError         string         `json:"last_error,omitempty"`
-	LastErrorType     string         `json:"last_error_type,omitempty"`
-	LastErrorAt       string         `json:"last_error_at,omitempty"`
+	SiteID               string         `json:"site_id"`
+	SiteName             string         `json:"site_name"`
+	Group                string         `json:"group"`
+	GroupName            string         `json:"group_name"`
+	Transport            string         `json:"transport"`
+	Status               string         `json:"status"` // "idle", "starting", "running", "paused", "stopping", "stopped", "failed"
+	Running              bool           `json:"running"`
+	Paused               bool           `json:"paused"`
+	AutoPaused           bool           `json:"auto_paused"`
+	Failed               bool           `json:"failed"`
+	PauseReason          string         `json:"pause_reason,omitempty"`
+	ChatMode             string         `json:"chat_mode"`
+	Profile              string         `json:"profile"`
+	FolderPath           string         `json:"folder_path"`
+	SessionPath          string         `json:"session_path,omitempty"`
+	BotStatePath         string         `json:"bot_state_path,omitempty"`
+	ChatHistoryPath      string         `json:"chat_history_path,omitempty"`
+	LogPath              string         `json:"log_path"`
+	ErrorLogPath         string         `json:"error_log_path"`
+	ConsecutiveErrors    int            `json:"consecutive_errors"`
+	TotalErrors          int            `json:"total_errors"`
+	ErrorCounts          map[string]int `json:"error_counts"`
+	LastError            string         `json:"last_error,omitempty"`
+	LastErrorType        string         `json:"last_error_type,omitempty"`
+	LastErrorAt          string         `json:"last_error_at,omitempty"`
 	StartedAt            string         `json:"started_at,omitempty"`
 	StoppedAt            string         `json:"stopped_at,omitempty"`
 	RestartCount         int            `json:"restart_count"`
@@ -596,6 +596,8 @@ func (s *Supervisor) StartSite(siteID string) error {
 		return prepErr
 	}
 
+	transport := ResolveSiteTransport(sr.siteCfg, botCfg, s.useLiveBrowser)
+
 	blessConn, _ := ConnectBrowserlessSite(s.dataDir, sr.siteID)
 	if blessConn != nil {
 		botCfg = botCfg.WithSessionConnection(blessConn.ToBotSessionConnection())
@@ -604,7 +606,6 @@ func (s *Supervisor) StartSite(siteID string) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	transport := ResolveSiteTransport(sr.siteCfg, botCfg, s.useLiveBrowser)
 	botPaths := bot.ProfilePaths(botCfg)
 	chatHistPath, _ := sr.siteCtx.Resolve(filepath.Join("logs", bot.SiteChatHistoryFileName))
 

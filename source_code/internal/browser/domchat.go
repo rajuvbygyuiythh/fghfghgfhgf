@@ -47,7 +47,9 @@ func ConnectHeadlessDOMSession(ctx context.Context, backend Backend, conn DOMSes
 		return err
 	}
 	if len(conn.Login.Cookies) > 0 || len(conn.Login.LocalStorage) > 0 {
-		_ = backend.RestoreSession(ctx, conn.Login)
+		if seeder, ok := backend.(SessionSeeder); ok {
+			_ = seeder.SeedSession(ctx, conn.Login)
+		}
 	}
 	return nil
 }

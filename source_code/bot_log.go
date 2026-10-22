@@ -392,4 +392,3 @@ func (a *App) ClearCombinedLiveLog() error {
 	a.emit("ui:combinedlog", map[string]any{"version": version})
 	return nil
 }
-

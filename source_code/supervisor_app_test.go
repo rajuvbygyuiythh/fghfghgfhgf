@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"chitchat-wails/internal/settings"
+	"chitchatbot/internal/model"
+	"chitchatbot/internal/settings"
 )
 
 func TestAppStartSitesStopSitesGetSiteStatusesAndBackwardCompat(t *testing.T) {
@@ -106,10 +107,10 @@ func TestAppGetSiteDetailAndSaveSiteOverrideImmediateApply(t *testing.T) {
 	}
 	defer app.shutdown(nil)
 
-	if err := app.StartSiteRunner("omezy"); err != nil {
-		t.Fatalf("StartSiteRunner(omezy): %v", err)
+	if err := app.StartSite("omezy"); err != nil {
+		t.Fatalf("StartSite(omezy): %v", err)
 	}
-	defer func() { _ = app.StopSiteRunner("omezy") }()
+	defer func() { _ = app.StopSite("omezy") }()
 
 	detail, err := app.GetSiteDetail("omezy")
 	if err != nil {
@@ -122,22 +123,23 @@ func TestAppGetSiteDetailAndSaveSiteOverrideImmediateApply(t *testing.T) {
 		t.Fatalf("expected HasOverride=false initially")
 	}
 
+	mode := "eva_chat_flow"
 	updated, err := app.SaveSiteOverride("omezy", settings.Override{
-		MessageMode: "eva_chat_flow",
-		ReplyDelay:  &settings.ReplyDelaySettings{MinSeconds: 2, MaxSeconds: 6},
-		Proxy:       &settings.ProxySettings{Enabled: true, Entries: "socks5://10.0.0.1:1080"},
+		MessageMode: &mode,
+		ReplyDelay:  &settings.DurationRange{MinSeconds: 2, MaxSeconds: 6},
+		Proxy:       &model.ProxySettings{Enabled: true, Entries: "socks5://10.0.0.1:1080"},
 	})
 	if err != nil {
 		t.Fatalf("SaveSiteOverride(omezy): %v", err)
 	}
-	if !updated.HasOverride || updated.Override.MessageMode != "eva_chat_flow" {
+	if !updated.HasOverride || updated.Override.MessageMode == nil || *updated.Override.MessageMode != "eva_chat_flow" {
 		t.Fatalf("expected override applied in SiteDetailView, got %+v", updated)
 	}
 
 	// Verify running site runner reloaded its effective settings immediately
-	st, err := app.GetSiteStatus("omezy")
+	st, err := app.GetStatus("omezy")
 	if err != nil {
-		t.Fatalf("GetSiteStatus(omezy): %v", err)
+		t.Fatalf("GetStatus(omezy): %v", err)
 	}
 	if !st.Running || st.ChatMode != "eva_chat_flow" {
 		t.Fatalf("expected running site ChatMode immediately updated to eva_chat_flow, got %+v", st)
@@ -148,4 +150,3 @@ func TestAppGetSiteDetailAndSaveSiteOverrideImmediateApply(t *testing.T) {
 		t.Fatalf("RefreshSiteSession(omezy): %v (%+v)", err, refreshed)
 	}
 }
-

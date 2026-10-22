@@ -247,3 +247,21 @@ test('Prompt 15: Settings Sync (sites/_global/settings.json <-> apichat.exe), RP
  assert.match(read('docs/PROJECT_MAP.md'),/docs\/MULTISITE_GUIDE\.md/);
 });
 
+test('Prompt 16: Full Integration Test (integration_test.go) covers 3 mock sites (Group A, B, C) and all 8 multi-site isolation checks',()=>{
+ assert.ok(fs.existsSync(path.join(root,'integration_test.go')),'missing integration_test.go');
+ const integ=read('integration_test.go');
+ assert.match(integ,/TestPrompt16FullMultiSiteIntegration/);
+ assert.match(integ,/mock_group_a/);
+ assert.match(integ,/mock_group_b/);
+ assert.match(integ,/mock_group_c/);
+ assert.match(integ,/CaptureSession/);
+ assert.match(integ,/ConnectBrowserlessSite/);
+ assert.match(integ,/StartSites/);
+ assert.match(integ,/simulated crash in mock_group_b/);
+ assert.match(integ,/SaveGlobalSettings/);
+ assert.match(integ,/SaveSiteOverride/);
+ assert.match(integ,/RecoverSite/);
+ assert.match(integ,/SafeJoin/);
+});
+
+

@@ -167,6 +167,7 @@ type Classification struct {
 	Group        string       `json:"group"`
 	GroupName    string       `json:"group_name"`
 	Confidence   string       `json:"confidence"`
+	ChatMethod   string       `json:"chat_method,omitempty"`
 	Source       string       `json:"source,omitempty"`
 	Reason       string       `json:"reason,omitempty"`
 	ProbeCount   int          `json:"probe_count,omitempty"`

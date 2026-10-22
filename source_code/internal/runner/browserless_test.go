@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"chitchat-wails/internal/sites"
+	"chitchatbot/internal/sites"
 )
 
 func TestPrompt11BrowserlessConnectionsGroupsAtoEAndSameSessionReconnect(t *testing.T) {
@@ -17,9 +17,9 @@ func TestPrompt11BrowserlessConnectionsGroupsAtoEAndSameSessionReconnect(t *test
 	}
 
 	// Group A (Guest Instant): browserless WebSocket / API (no visible browser)
-	connA, err := ConnectBrowserlessSite(dataDir, "chatib")
+	connA, err := ConnectBrowserlessSite(dataDir, "omezy")
 	if err != nil {
-		t.Fatalf("ConnectBrowserlessSite(chatib): %v", err)
+		t.Fatalf("ConnectBrowserlessSite(omezy): %v", err)
 	}
 	if connA.Group != sites.GroupA || connA.VisibleBrowser || !connA.Headless {
 		t.Fatalf("expected Group A browserless (Headless=true, VisibleBrowser=false), got %+v", connA)
@@ -29,9 +29,9 @@ func TestPrompt11BrowserlessConnectionsGroupsAtoEAndSameSessionReconnect(t *test
 	}
 
 	// Group B (Auto-Signup): browserless API / WebSocket
-	connB, err := ConnectBrowserlessSite(dataDir, "omezy")
+	connB, err := ConnectBrowserlessSite(dataDir, "chatib")
 	if err != nil {
-		t.Fatalf("ConnectBrowserlessSite(omezy): %v", err)
+		t.Fatalf("ConnectBrowserlessSite(chatib): %v", err)
 	}
 	if connB.Group != sites.GroupB || connB.VisibleBrowser || !connB.Headless {
 		t.Fatalf("expected Group B browserless, got %+v", connB)
@@ -50,9 +50,9 @@ func TestPrompt11BrowserlessConnectionsGroupsAtoEAndSameSessionReconnect(t *test
 	}
 
 	// Group D (Anti-Bot): headless Rod in background with cookies injected
-	connD, err := ConnectBrowserlessSite(dataDir, "e_chat")
+	connD, err := ConnectBrowserlessSite(dataDir, "chatblink")
 	if err != nil {
-		t.Fatalf("ConnectBrowserlessSite(e_chat): %v", err)
+		t.Fatalf("ConnectBrowserlessSite(chatblink): %v", err)
 	}
 	if connD.Group != sites.GroupD || connD.Method != BrowserlessMethodHeadlessDOM || !connD.Headless || connD.VisibleBrowser {
 		t.Fatalf("expected Group D headless_dom in background, got %+v", connD)
