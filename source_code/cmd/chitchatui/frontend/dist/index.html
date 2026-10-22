@@ -54,26 +54,54 @@
         </div>
       </div>
 
-      <nav class="nav" aria-label="Main modes">
-        <button class="nav-button active" data-tab="show">Show Mode</button>
-        <button class="nav-button" data-tab="bot">Background Bot</button>
+      <nav class="dashboard-tab-bar" id="dashboard-tab-bar" role="tablist" aria-label="Dashboard tabs">
+        <button type="button" id="dash-tab-control-center" class="dash-tab-button active" role="tab" aria-selected="true" aria-controls="dash-panel-control-center" data-dash-tab="control-center">
+          <span class="dash-tab-title">1 · Control Center</span>
+          <span class="dash-tab-desc">Global settings · Start/Stop · Live log</span>
+        </button>
+        <button type="button" id="dash-tab-site-manager" class="dash-tab-button" role="tab" aria-selected="false" aria-controls="dash-panel-site-manager" data-dash-tab="site-manager">
+          <span class="dash-tab-title">2 · Site Manager</span>
+          <span class="dash-tab-desc">Site grid · Group view · Per-site detail</span>
+        </button>
+        <button type="button" id="dash-tab-sessions" class="dash-tab-button" role="tab" aria-selected="false" aria-controls="dash-panel-sessions" data-dash-tab="sessions">
+          <span class="dash-tab-title">3 · Sessions</span>
+          <span class="dash-tab-desc">Session capture · Health monitor</span>
+        </button>
       </nav>
 
-      <nav class="subnav" id="subnav-show" aria-label="Show Mode sections">
-        <button class="subnav-button active" data-subpanel="show-setting">Setting</button>
-        <button class="subnav-button" data-subpanel="show-proxy">Proxy</button>
-        <button class="subnav-button" data-subpanel="show-message">Message</button>
-        <button class="subnav-button" data-subpanel="show-run">Run Browser</button>
-        <button class="subnav-button" data-subpanel="show-logs">Live Logs</button>
-      </nav>
+      <div id="control-center-sidebar-nav" class="dash-sidebar-section active" data-dash-sidebar="control-center">
+        <div class="dash-sidebar-label">Control Center Modes</div>
+        <nav class="nav" aria-label="Main modes">
+          <button class="nav-button active" data-tab="show">Show Mode</button>
+          <button class="nav-button" data-tab="bot">Background Bot</button>
+        </nav>
 
-      <nav class="subnav" id="subnav-bot" aria-label="Background Bot sections" hidden>
-        <button class="subnav-button active" data-subpanel="bg-login">Login Capture</button>
-        <button class="subnav-button" data-subpanel="bg-proxy">Proxy</button>
-        <button class="subnav-button" data-subpanel="bg-message">Message</button>
-        <button class="subnav-button" data-subpanel="bg-settings">Bot Settings</button>
-        <button class="subnav-button" data-subpanel="bg-logs">Live Logs</button>
-      </nav>
+        <nav class="subnav" id="subnav-show" aria-label="Show Mode sections">
+          <button class="subnav-button active" data-subpanel="show-setting">Setting</button>
+          <button class="subnav-button" data-subpanel="show-proxy">Proxy</button>
+          <button class="subnav-button" data-subpanel="show-message">Message</button>
+          <button class="subnav-button" data-subpanel="show-run">Run Browser</button>
+          <button class="subnav-button" data-subpanel="show-logs">Live Logs</button>
+        </nav>
+
+        <nav class="subnav" id="subnav-bot" aria-label="Background Bot sections" hidden>
+          <button class="subnav-button active" data-subpanel="bg-login">Login Capture</button>
+          <button class="subnav-button" data-subpanel="bg-proxy">Proxy</button>
+          <button class="subnav-button" data-subpanel="bg-message">Message</button>
+          <button class="subnav-button" data-subpanel="bg-settings">Bot Settings</button>
+          <button class="subnav-button" data-subpanel="bg-logs">Live Logs</button>
+        </nav>
+      </div>
+
+      <div id="site-manager-sidebar-nav" class="dash-sidebar-section" data-dash-sidebar="site-manager" hidden>
+        <div class="dash-sidebar-label">Site Manager Groups (A–E)</div>
+        <div class="dash-sidebar-hint">Filter 102 isolated site folders by classification group or inspect per-site setup recipes and overrides.</div>
+      </div>
+
+      <div id="sessions-sidebar-nav" class="dash-sidebar-section" data-dash-sidebar="sessions" hidden>
+        <div class="dash-sidebar-label">Session Store &amp; Health</div>
+        <div class="dash-sidebar-hint">Capture browser/guest sessions into <code>sites/&lt;site_id&gt;/sessions/</code> and monitor health across all sites.</div>
+      </div>
 
       <div class="sidebar-footer">
         <div class="status-row">
@@ -84,6 +112,25 @@
     </aside>
 
     <main class="main">
+      <!-- ======================= TAB 1: CONTROL CENTER ======================= -->
+      <div id="dash-panel-control-center" class="dash-tab-panel active" role="tabpanel" aria-labelledby="dash-tab-control-center" data-dash-panel="control-center">
+        <section class="card cc-overview-bar" id="cc-overview-bar" aria-label="Control Center Global Controls">
+          <div class="cc-overview-head">
+            <div>
+              <div class="title-row">
+                <h2 class="cc-overview-title">Control Center · Global Settings &amp; Multi-Site Supervisor</h2>
+                <span id="cc-global-source-badge" class="mode-badge">sites/_global/settings.json</span>
+              </div>
+              <p id="cc-multi-status" class="hint-text">Global settings apply to all 102 isolated sites unless overridden in <code>sites/&lt;site_id&gt;/settings_override.json</code>.</p>
+            </div>
+            <div class="actions">
+              <button type="button" id="cc-start-all-btn" class="primary-button">&#9654; Start All Sites</button>
+              <button type="button" id="cc-stop-all-btn" class="secondary-button">&#9632; Stop All Sites</button>
+              <button type="button" id="cc-jump-logs-btn" class="secondary-button">Live Logs</button>
+            </div>
+          </div>
+        </section>
+
       <!-- ============================ SHOW MODE ============================ -->
       <section class="tab-panel active" data-panel="show">
         <header class="panel-header">
@@ -654,6 +701,132 @@
           </div>
         </section>
       </section>
+      </div>
+
+      <!-- ======================= TAB 2: SITE MANAGER ======================= -->
+      <div id="dash-panel-site-manager" class="dash-tab-panel" role="tabpanel" aria-labelledby="dash-tab-site-manager" data-dash-panel="site-manager" hidden>
+        <header class="panel-header">
+          <div>
+            <div class="title-row">
+              <h1>Site Manager</h1>
+              <span id="smgr-total-badge" class="mode-badge">102 Isolated Sites</span>
+            </div>
+            <p>Site grid, Group A–E classification view, and per-site detail inspector. Every site is strictly isolated inside <code>sites/&lt;site_id&gt;/</code>.</p>
+          </div>
+          <div class="actions">
+            <button type="button" id="smgr-start-selected-btn" class="primary-button">&#9654; Start Selected</button>
+            <button type="button" id="smgr-stop-selected-btn" class="secondary-button">&#9632; Stop Selected</button>
+            <button type="button" id="smgr-refresh-btn" class="secondary-button">Refresh</button>
+          </div>
+        </header>
+
+        <p id="smgr-status" class="status-line" role="status" aria-live="polite">Select a group or site to inspect and control.</p>
+
+        <section class="card smgr-toolbar-card">
+          <div class="smgr-group-bar" id="smgr-group-bar" role="group" aria-label="Filter sites by classification group">
+            <button type="button" id="smgr-group-all" class="site-filter-pill active" data-smgr-group="ALL">All Groups</button>
+            <button type="button" id="smgr-group-a" class="site-filter-pill" data-smgr-group="A">Group A · Browserless</button>
+            <button type="button" id="smgr-group-b" class="site-filter-pill" data-smgr-group="B">Group B · Auto-Signup</button>
+            <button type="button" id="smgr-group-c" class="site-filter-pill" data-smgr-group="C">Group C · Browser-Once</button>
+            <button type="button" id="smgr-group-d" class="site-filter-pill" data-smgr-group="D">Group D · DOM-Only</button>
+            <button type="button" id="smgr-group-e" class="site-filter-pill" data-smgr-group="E">Group E · Manual</button>
+          </div>
+          <div class="smgr-search-row">
+            <input type="text" id="smgr-search-input" placeholder="Filter site grid by name, ID, or URL…" autocomplete="off" aria-label="Search sites in Site Manager">
+          </div>
+        </section>
+
+        <div class="smgr-layout">
+          <section class="card smgr-grid-card" aria-label="Site Grid">
+            <div class="account-card-head">
+              <h2>Site Grid</h2>
+              <span id="smgr-grid-count" class="status-line">0 sites shown</span>
+            </div>
+            <div id="smgr-site-grid" class="smgr-site-grid" aria-live="polite"></div>
+          </section>
+
+          <section class="card smgr-detail-card" id="smgr-site-detail" aria-label="Per-Site Detail">
+            <div class="account-card-head">
+              <h2 id="smgr-detail-title">ChitChat.gg (chitchat)</h2>
+              <span id="smgr-detail-status-badge" class="mode-badge">stopped</span>
+            </div>
+            <p id="smgr-detail-url" class="hint-text">https://app.chitchat.gg/text?auth=email</p>
+            <div class="smgr-detail-meta">
+              <div class="smgr-detail-row"><span>Isolated Folder</span><code id="smgr-detail-folder">sites/chitchat/</code></div>
+              <div class="smgr-detail-row"><span>Group / Mode</span><strong id="smgr-detail-group">Group C · browser_setup</strong></div>
+              <div class="smgr-detail-row"><span>Saved Sessions</span><strong id="smgr-detail-session">0 saved</strong></div>
+              <div class="smgr-detail-row"><span>Settings Source</span><code id="smgr-detail-override">sites/_global/settings.json</code></div>
+            </div>
+            <div class="form-actions">
+              <button type="button" id="smgr-detail-start" class="primary-button">&#9654; Start Site</button>
+              <button type="button" id="smgr-detail-stop" class="secondary-button">&#9632; Stop Site</button>
+              <button type="button" id="smgr-detail-recipe" class="secondary-button">&#9881; Run Recipe</button>
+              <button type="button" id="smgr-detail-browser" class="secondary-button">&#127760; Browser</button>
+              <button type="button" id="smgr-detail-folder-btn" class="site-mini-btn">Open Folder</button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ========================= TAB 3: SESSIONS ========================= -->
+      <div id="dash-panel-sessions" class="dash-tab-panel" role="tabpanel" aria-labelledby="dash-tab-sessions" data-dash-panel="sessions" hidden>
+        <header class="panel-header">
+          <div>
+            <div class="title-row">
+              <h1>Sessions</h1>
+              <span id="sess-summary-badge" class="mode-badge">Session Capture &amp; Health Monitor</span>
+            </div>
+            <p>Capture browser or browserless guest sessions into <code>sites/&lt;site_id&gt;/sessions/</code> and monitor real-time session health across all sites.</p>
+          </div>
+          <div class="actions">
+            <button type="button" id="sess-refresh-btn" class="secondary-button">Refresh Health</button>
+          </div>
+        </header>
+
+        <p id="sess-status" class="status-line" role="status" aria-live="polite">Session store isolated per site.</p>
+
+        <div class="home-stats" id="sess-health-stats" aria-label="Session health summary">
+          <div class="stat-capsule">
+            <span>Total Sites</span>
+            <strong id="sess-stat-total">0</strong>
+          </div>
+          <div class="stat-capsule">
+            <span>Saved Sessions</span>
+            <strong id="sess-stat-saved">0</strong>
+          </div>
+          <div class="stat-capsule">
+            <span>Running Now</span>
+            <strong id="sess-stat-running">0</strong>
+          </div>
+          <div class="stat-capsule danger">
+            <span>Needs Attention</span>
+            <strong id="sess-stat-issues">0</strong>
+          </div>
+        </div>
+
+        <section class="card sess-capture-card" id="sess-capture-card">
+          <div class="account-card-head">
+            <h2>1 · Session Capture (<span id="sess-active-site-label">chitchat</span>)</h2>
+            <span class="mode-badge">sites/&lt;site_id&gt;/sessions/</span>
+          </div>
+          <p class="hint-text">Capture a fresh login session via visible browser, auto-register guest accounts without a browser, or run the Group A–E setup recipe for the selected site.</p>
+          <div class="form-actions">
+            <button type="button" id="sess-capture-browser-btn" class="primary-button">&#127760; Capture Session in Browser</button>
+            <button type="button" id="sess-capture-autoreg-btn" class="secondary-button">&#9889; Auto-Register Guest Session</button>
+            <button type="button" id="sess-capture-recipe-btn" class="secondary-button">&#9881; Run Setup Recipe</button>
+          </div>
+          <p id="sess-capture-status" class="status-line" role="status" aria-live="polite">Ready to capture session for active site.</p>
+        </section>
+
+        <section class="card site-session-list-card">
+          <div class="account-card-head">
+            <h2>2 · Session Health Monitor</h2>
+            <span class="mode-badge">Isolated Session Store</span>
+          </div>
+          <p class="hint-text">Live session status, saved account counts, and isolated session file paths for each site.</p>
+          <div id="sess-health-list" class="site-session-table" aria-live="polite"></div>
+        </section>
+      </div>
     </main>
   </div>
 

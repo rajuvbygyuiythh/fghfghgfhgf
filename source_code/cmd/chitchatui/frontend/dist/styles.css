@@ -1371,4 +1371,238 @@ details.advanced[open] summary {
   }
 }
 
+/* ------------------------------------------- 3-tab dashboard structure */
+.dashboard-tab-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.dash-tab-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.dash-tab-button:hover:not(:disabled) {
+  background: var(--panel-alt);
+  border-color: rgba(131, 203, 115, 0.3);
+}
+
+.dash-tab-button.active {
+  background: rgba(131, 203, 115, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.dash-tab-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.dash-tab-desc {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.dash-tab-button.active .dash-tab-desc {
+  color: #cfe8c8;
+}
+
+.dash-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dash-sidebar-section[hidden] {
+  display: none !important;
+}
+
+.dash-sidebar-label {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.dash-sidebar-hint {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.dash-tab-panel {
+  display: none;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.dash-tab-panel.active {
+  display: block;
+}
+
+.dash-tab-panel[hidden] {
+  display: none !important;
+}
+
+.cc-overview-bar {
+  margin-bottom: 18px;
+  padding: 14px 18px;
+  border-color: rgba(131, 203, 115, 0.35);
+  background: linear-gradient(180deg, rgba(131, 203, 115, 0.07), rgba(32, 34, 30, 0.95));
+}
+
+.cc-overview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cc-overview-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.smgr-toolbar-card {
+  margin-bottom: 14px;
+}
+
+.smgr-group-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.smgr-search-row {
+  margin-top: 4px;
+}
+
+.smgr-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.95fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.smgr-site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  max-height: 540px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.smgr-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-alt);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.smgr-grid-item:hover {
+  border-color: rgba(131, 203, 115, 0.45);
+}
+
+.smgr-grid-item.active {
+  border-color: var(--accent);
+  background: rgba(131, 203, 115, 0.09);
+}
+
+.smgr-grid-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.smgr-grid-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smgr-grid-meta {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smgr-grid-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.smgr-detail-meta {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-alt);
+}
+
+.smgr-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.smgr-detail-row span {
+  color: var(--muted);
+}
+
+.sess-capture-card {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1000px) {
+  .smgr-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 

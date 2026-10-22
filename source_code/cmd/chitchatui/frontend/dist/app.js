@@ -11,6 +11,7 @@
 
 const state = {
   snapshot: null,
+  dashTab: "control-center",
   tab: "show",
   runningShow: false,
   runningBot: false,
@@ -18,6 +19,9 @@ const state = {
   loadedSequences: { sm: 0, bg: 0 },
   profiles: [],
   siteFilter: "all",
+  smgrGroup: "ALL",
+  selectedSites: [],
+  siteStatuses: {},
   activeSub: { show: "show-setting", bot: "bg-login" },
   showLog: { after: 0, entries: [], pending: false },
   botLog: { after: 0, entries: [], pending: false },
@@ -106,6 +110,40 @@ function setStatus(id, message, kind) {
 // ---------------------------------------------------------------------------
 // Tabs / running badges
 // ---------------------------------------------------------------------------
+function normalizeDashboardTab(tab) {
+  if (!tab) return null;
+  const t = String(tab).toLowerCase();
+  if (t === "control-center" || t === "control" || t === "tab1") return "control-center";
+  if (t === "site-manager" || t === "sites" || t === "tab2") return "site-manager";
+  if (t === "sessions" || t === "session" || t === "tab3") return "sessions";
+  return null;
+}
+
+function activateDashboardTab(dashTab) {
+  const normalized = normalizeDashboardTab(dashTab) || "control-center";
+  state.dashTab = normalized;
+  document.querySelectorAll(".dash-tab-button").forEach((button) => {
+    const active = button.dataset.dashTab === normalized;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  document.querySelectorAll(".dash-tab-panel").forEach((panel) => {
+    const active = panel.dataset.dashPanel === normalized;
+    panel.classList.toggle("active", active);
+    panel.hidden = !active;
+  });
+  document.querySelectorAll(".dash-sidebar-section").forEach((sec) => {
+    const active = sec.dataset.dashSidebar === normalized;
+    sec.classList.toggle("active", active);
+    sec.hidden = !active;
+  });
+  if (normalized === "site-manager") {
+    renderSiteManager();
+  } else if (normalized === "sessions") {
+    renderSessionsTab();
+  }
+}
+
 function activateSubpanel(panel) {
   if (!panel) return;
   const mode = panel.startsWith("bg-") ? "bot" : "show";
@@ -122,6 +160,14 @@ function activateSubpanel(panel) {
 }
 
 function activateTab(tab) {
+  const dashTarget = normalizeDashboardTab(tab);
+  if (dashTarget) {
+    activateDashboardTab(dashTarget);
+    return;
+  }
+  if (state.dashTab !== "control-center") {
+    activateDashboardTab("control-center");
+  }
   state.tab = tab === "bot" ? "bot" : "show";
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === state.tab);
@@ -139,6 +185,9 @@ function activateTab(tab) {
 }
 
 function bindTabs() {
+  document.querySelectorAll(".dash-tab-button").forEach((button) => {
+    button.addEventListener("click", () => activateDashboardTab(button.dataset.dashTab));
+  });
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => activateTab(button.dataset.tab));
   });
@@ -755,6 +804,364 @@ function fillSites(snapshot) {
   }
   updateSiteAccountCards(activeObj);
   renderSiteSessionLists(filteredSites, activeId);
+  renderSiteManager();
+  renderSessionsTab();
+}
+
+function siteGroupCode(site) {
+  if (!site) return "B";
+  if (site.classification_group) return String(site.classification_group).toUpperCase();
+  if (site.classification && site.classification.group) return String(site.classification.group).toUpperCase();
+  const id = String(site.id || "").toLowerCase();
+  if (["chatrandom_text", "emeraldchat", "omegleweb_com", "umingle"].includes(id)) return "E";
+  if (id === "chitchat" || site.account_mode === "browser_setup") return "C";
+  if (site.auth_mode === "guest_Socket" || site.auth_mode === "guest_api") return "A";
+  return "B";
+}
+
+function setSiteManagerGroup(group) {
+  state.smgrGroup = group || "ALL";
+  const map = {
+    ALL: "smgr-group-all",
+    A: "smgr-group-a",
+    B: "smgr-group-b",
+    C: "smgr-group-c",
+    D: "smgr-group-d",
+    E: "smgr-group-e",
+  };
+  for (const [g, btnId] of Object.entries(map)) {
+    const btn = byId(btnId);
+    if (btn) btn.classList.toggle("active", state.smgrGroup === g);
+  }
+  renderSiteManager();
+}
+
+function renderSiteDetail(activeObj) {
+  if (!activeObj) return;
+  const siteId = activeObj.id || "chitchat";
+  const group = siteGroupCode(activeObj);
+  const accMode = siteAccountMode(activeObj);
+  const hasSaved = Boolean(activeObj.has_saved_session || Number(activeObj.account_count || 0) > 0);
+  const runnerInfo = state.siteStatuses[siteId] || {};
+  const runnerState = runnerInfo.state || "stopped";
+
+  const titleEl = byId("smgr-detail-title");
+  const badgeEl = byId("smgr-detail-status-badge");
+  const urlEl = byId("smgr-detail-url");
+  const folderEl = byId("smgr-detail-folder");
+  const groupEl = byId("smgr-detail-group");
+  const sessionEl = byId("smgr-detail-session");
+  const overrideEl = byId("smgr-detail-override");
+
+  if (titleEl) titleEl.textContent = `${activeObj.name || siteId} (${siteId})`;
+  if (badgeEl) {
+    badgeEl.textContent = runnerState;
+    badgeEl.classList.toggle("live", runnerState === "running");
+  }
+  if (urlEl) urlEl.textContent = activeObj.start_url || "";
+  if (folderEl) folderEl.textContent = `sites/${siteId}/`;
+  if (groupEl) groupEl.textContent = `Group ${group} · ${accMode}`;
+  if (sessionEl) {
+    sessionEl.textContent = hasSaved
+      ? `${activeObj.account_count || 1} saved in sites/${siteId}/sessions/`
+      : `0 saved in sites/${siteId}/sessions/`;
+  }
+  if (overrideEl) {
+    overrideEl.textContent = activeObj.has_override
+      ? `sites/${siteId}/settings_override.json`
+      : "sites/_global/settings.json";
+  }
+}
+
+function renderSiteManager() {
+  const grid = byId("smgr-site-grid");
+  const countEl = byId("smgr-grid-count");
+  const totalBadge = byId("smgr-total-badge");
+  if (!grid) return;
+
+  const sitesList = Array.isArray(state.snapshot?.sites) && state.snapshot.sites.length > 0
+    ? state.snapshot.sites
+    : [{ id: "chitchat", name: "ChitChat.gg", account_mode: "browser_setup", start_url: "https://app.chitchat.gg/text?auth=email" }];
+  const activeId = state.snapshot?.active_site || "chitchat";
+  const searchEl = byId("smgr-search-input");
+  const query = searchEl ? (searchEl.value || "").trim().toLowerCase() : "";
+  const groupFilter = state.smgrGroup || "ALL";
+
+  if (totalBadge) totalBadge.textContent = `${sitesList.length} Isolated Sites`;
+
+  const filtered = [];
+  for (const s of sitesList) {
+    const grp = siteGroupCode(s);
+    if (groupFilter !== "ALL" && grp !== groupFilter) continue;
+    const hay = `${s.id || ""} ${s.name || ""} ${s.start_url || ""} group ${grp}`.toLowerCase();
+    if (query && !hay.includes(query)) continue;
+    filtered.push(s);
+  }
+
+  if (countEl) countEl.textContent = `${filtered.length} of ${sitesList.length} sites shown`;
+
+  grid.replaceChildren();
+  for (const s of filtered) {
+    const grp = siteGroupCode(s);
+    const hasSaved = Boolean(s.has_saved_session || Number(s.account_count || 0) > 0);
+    const runnerInfo = state.siteStatuses[s.id] || {};
+    const rState = runnerInfo.state || "stopped";
+    const isChecked = state.selectedSites.includes(s.id);
+
+    const card = document.createElement("div");
+    card.className = "smgr-grid-item" + (s.id === activeId ? " active" : "");
+    card.dataset.siteCard = s.id;
+
+    const top = document.createElement("div");
+    top.className = "smgr-grid-top";
+
+    const checkLabel = document.createElement("label");
+    checkLabel.className = "checkbox-row";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = isChecked;
+    checkbox.dataset.siteSelectCheck = s.id;
+    checkbox.addEventListener("click", (e) => e.stopPropagation());
+    checkbox.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        if (!state.selectedSites.includes(s.id)) state.selectedSites.push(s.id);
+      } else {
+        state.selectedSites = state.selectedSites.filter((id) => id !== s.id);
+      }
+    });
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "smgr-grid-name";
+    nameSpan.textContent = s.name || s.id;
+    checkLabel.append(checkbox, nameSpan);
+
+    const grpBadge = document.createElement("span");
+    grpBadge.className = "site-session-badge" + (rState === "running" ? " saved" : "");
+    grpBadge.textContent = `G-${grp} · ${rState}`;
+    top.append(checkLabel, grpBadge);
+
+    const meta = document.createElement("div");
+    meta.className = "smgr-grid-meta";
+    meta.textContent = `sites/${s.id}/ · ${hasSaved ? "✓ session" : "○ no session"}`;
+
+    const actions = document.createElement("div");
+    actions.className = "smgr-grid-actions";
+
+    const startBtn = document.createElement("button");
+    startBtn.type = "button";
+    startBtn.className = "site-mini-btn";
+    startBtn.dataset.smgrStart = s.id;
+    startBtn.textContent = "▶ Start";
+    startBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startSingleSiteRunner(s.id);
+    });
+
+    const stopBtn = document.createElement("button");
+    stopBtn.type = "button";
+    stopBtn.className = "site-mini-btn";
+    stopBtn.dataset.smgrStop = s.id;
+    stopBtn.textContent = "■ Stop";
+    stopBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      stopSingleSiteRunner(s.id);
+    });
+
+    actions.append(startBtn, stopBtn);
+    card.append(top, meta, actions);
+    card.addEventListener("click", () => selectTargetSite(s.id));
+    grid.appendChild(card);
+  }
+
+  const activeObj = sitesList.find((s) => s.id === activeId) || sitesList[0];
+  renderSiteDetail(activeObj);
+}
+
+function renderSessionsTab() {
+  const listEl = byId("sess-health-list");
+  if (!listEl) return;
+  const sitesList = Array.isArray(state.snapshot?.sites) && state.snapshot.sites.length > 0
+    ? state.snapshot.sites
+    : [{ id: "chitchat", name: "ChitChat.gg", account_mode: "browser_setup", start_url: "https://app.chitchat.gg/text?auth=email" }];
+  const activeId = state.snapshot?.active_site || "chitchat";
+
+  const activeLabel = byId("sess-active-site-label");
+  if (activeLabel) activeLabel.textContent = activeId;
+
+  let savedCount = 0;
+  let runningCount = 0;
+  let issueCount = 0;
+  for (const s of sitesList) {
+    if (s.has_saved_session || Number(s.account_count || 0) > 0) savedCount += 1;
+    const st = state.siteStatuses[s.id];
+    if (st && st.state === "running") runningCount += 1;
+    if (st && (st.state === "paused" || st.state === "failed" || Number(st.error_count || 0) > 0)) issueCount += 1;
+  }
+
+  const totalEl = byId("sess-stat-total");
+  const savedEl = byId("sess-stat-saved");
+  const runningEl = byId("sess-stat-running");
+  const issuesEl = byId("sess-stat-issues");
+  if (totalEl) totalEl.textContent = String(sitesList.length);
+  if (savedEl) savedEl.textContent = String(savedCount);
+  if (runningEl) runningEl.textContent = String(runningCount);
+  if (issuesEl) issuesEl.textContent = String(issueCount);
+
+  listEl.replaceChildren();
+  for (const s of sitesList) {
+    const hasSaved = Boolean(s.has_saved_session || Number(s.account_count || 0) > 0);
+    const st = state.siteStatuses[s.id] || {};
+    const rState = st.state || "stopped";
+    const row = document.createElement("div");
+    row.className = "site-session-row";
+    row.dataset.sessionHealthRow = s.id;
+
+    const info = document.createElement("div");
+    info.className = "site-session-info";
+    const nameEl = document.createElement("div");
+    nameEl.className = "site-session-name";
+    nameEl.textContent = `${s.name || s.id} (${s.id})`;
+    const metaEl = document.createElement("div");
+    metaEl.className = "site-session-meta";
+    const sessionPath = s.session_path || `sites/${s.id}/sessions/${s.id}_session.json`;
+    metaEl.textContent = `Session Store: ${sessionPath} · Runner: ${rState}`;
+    info.append(nameEl, metaEl);
+
+    const actions = document.createElement("div");
+    actions.className = "site-session-actions";
+
+    const badge = document.createElement("span");
+    badge.className = "site-session-badge" + (hasSaved ? " saved" : "");
+    badge.textContent = hasSaved
+      ? `✓ Healthy (${s.account_count || 1} saved)`
+      : "○ Needs Capture";
+
+    const captureBtn = document.createElement("button");
+    captureBtn.type = "button";
+    captureBtn.className = "secondary-button site-row-browser-btn";
+    captureBtn.dataset.sessCaptureBrowser = s.id;
+    captureBtn.textContent = "🌐 Capture Browser";
+    captureBtn.addEventListener("click", () => runSiteBrowserFor(s.id));
+
+    const runBtn = document.createElement("button");
+    runBtn.type = "button";
+    runBtn.className = "primary-button site-row-bot-btn";
+    runBtn.dataset.sessRunBot = s.id;
+    runBtn.textContent = "🤖 Run Bot";
+    runBtn.addEventListener("click", () => runSiteBotFor(s.id));
+
+    actions.append(badge, captureBtn, runBtn);
+    row.append(info, actions);
+    listEl.appendChild(row);
+  }
+}
+
+async function refreshSiteStatuses() {
+  if (!backend() || typeof backend().GetSiteStatuses !== "function") return;
+  try {
+    const statuses = await invoke("GetSiteStatuses");
+    state.siteStatuses = statuses && typeof statuses === "object" ? statuses : {};
+    let runningNow = 0;
+    for (const st of Object.values(state.siteStatuses)) {
+      if (st && st.state === "running") runningNow += 1;
+    }
+    const multiEl = byId("cc-multi-status");
+    if (multiEl) {
+      multiEl.textContent = `Supervisor active: ${runningNow} site(s) running · Global store: sites/_global/settings.json`;
+    }
+    if (state.dashTab === "site-manager") renderSiteManager();
+    if (state.dashTab === "sessions") renderSessionsTab();
+  } catch (_) { /* optional in mock tests */ }
+}
+
+async function startAllSitesRunner() {
+  try {
+    setStatus("cc-multi-status", "Starting all isolated site runners via Supervisor…");
+    await invoke("StartAll");
+    await refreshSiteStatuses();
+    setStatus("cc-multi-status", "All sites started in isolated goroutines.", "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+async function stopAllSitesRunner() {
+  try {
+    setStatus("cc-multi-status", "Stopping all site runners…");
+    await invoke("StopAll");
+    await refreshSiteStatuses();
+    setStatus("cc-multi-status", "All site runners stopped.", "ok");
+  } catch (error) {
+    setStatus("cc-multi-status", error.message || String(error), "error");
+  }
+}
+
+async function startSelectedSitesRunner() {
+  const targets = state.selectedSites.length > 0
+    ? state.selectedSites.slice()
+    : [value("active-site-select") || "chitchat"];
+  try {
+    setStatus("smgr-status", `Starting ${targets.length} selected site(s)…`);
+    await invoke("StartSites", targets);
+    await refreshSiteStatuses();
+    setStatus("smgr-status", `Started ${targets.length} site(s): ${targets.join(", ")}`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+async function stopSelectedSitesRunner() {
+  const targets = state.selectedSites.length > 0
+    ? state.selectedSites.slice()
+    : [value("active-site-select") || "chitchat"];
+  try {
+    setStatus("smgr-status", `Stopping ${targets.length} selected site(s)…`);
+    await invoke("StopSites", targets);
+    await refreshSiteStatuses();
+    setStatus("smgr-status", `Stopped ${targets.length} site(s): ${targets.join(", ")}`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+async function startSingleSiteRunner(siteId) {
+  const target = siteId || value("active-site-select") || "chitchat";
+  try {
+    setStatus("smgr-status", `Starting runner for sites/${target}/…`);
+    await invoke("StartSite", target);
+    await refreshSiteStatuses();
+    setStatus("smgr-status", `Runner started for sites/${target}/`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+async function stopSingleSiteRunner(siteId) {
+  const target = siteId || value("active-site-select") || "chitchat";
+  try {
+    setStatus("smgr-status", `Stopping runner for sites/${target}/…`);
+    await invoke("StopSite", target);
+    await refreshSiteStatuses();
+    setStatus("smgr-status", `Runner stopped for sites/${target}/`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+async function runRecipeForActiveSite() {
+  const target = value("active-site-select") || "chitchat";
+  try {
+    setStatus("smgr-status", `Running setup recipe for sites/${target}/…`);
+    setStatus("sess-capture-status", `Running setup recipe for sites/${target}/…`);
+    const res = await invoke("RunSiteRecipe", target, "");
+    await refreshState();
+    const msg = res?.summary || `Setup recipe executed for sites/${target}/`;
+    setStatus("smgr-status", msg, "ok");
+    setStatus("sess-capture-status", msg, "ok");
+  } catch (error) {
+    const errMsg = error.message || String(error);
+    setStatus("smgr-status", errMsg, "error");
+    setStatus("sess-capture-status", errMsg, "error");
+  }
 }
 
 function renderSiteSessionLists(sitesList, activeId) {
@@ -1360,6 +1767,93 @@ function bindActions() {
   byId("bg-save-message").addEventListener("click", () => saveMessageSettings("bg"));
   byId("bg-log-clear").addEventListener("click", clearBotLog);
   byId("bg-log-filter").addEventListener("change", renderBotLog);
+
+  // Dashboard 3-Tab bar & Tab 1/2/3 actions
+  const tabControl = byId("dash-tab-control-center");
+  const tabSites = byId("dash-tab-site-manager");
+  const tabSessions = byId("dash-tab-sessions");
+  if (tabControl) tabControl.addEventListener("click", () => activateDashboardTab("control-center"));
+  if (tabSites) tabSites.addEventListener("click", () => activateDashboardTab("site-manager"));
+  if (tabSessions) tabSessions.addEventListener("click", () => activateDashboardTab("sessions"));
+
+  const ccStartAll = byId("cc-start-all-btn");
+  const ccStopAll = byId("cc-stop-all-btn");
+  const ccJumpLogs = byId("cc-jump-logs-btn");
+  if (ccStartAll) ccStartAll.addEventListener("click", startAllSitesRunner);
+  if (ccStopAll) ccStopAll.addEventListener("click", stopAllSitesRunner);
+  if (ccJumpLogs) {
+    ccJumpLogs.addEventListener("click", () => {
+      activateSubpanel(state.tab === "bot" ? "bg-logs" : "show-logs");
+    });
+  }
+
+  const smgrGroupAll = byId("smgr-group-all");
+  const smgrGroupA = byId("smgr-group-a");
+  const smgrGroupB = byId("smgr-group-b");
+  const smgrGroupC = byId("smgr-group-c");
+  const smgrGroupD = byId("smgr-group-d");
+  const smgrGroupE = byId("smgr-group-e");
+  if (smgrGroupAll) smgrGroupAll.addEventListener("click", () => setSiteManagerGroup("ALL"));
+  if (smgrGroupA) smgrGroupA.addEventListener("click", () => setSiteManagerGroup("A"));
+  if (smgrGroupB) smgrGroupB.addEventListener("click", () => setSiteManagerGroup("B"));
+  if (smgrGroupC) smgrGroupC.addEventListener("click", () => setSiteManagerGroup("C"));
+  if (smgrGroupD) smgrGroupD.addEventListener("click", () => setSiteManagerGroup("D"));
+  if (smgrGroupE) smgrGroupE.addEventListener("click", () => setSiteManagerGroup("E"));
+
+  const smgrSearch = byId("smgr-search-input");
+  if (smgrSearch) smgrSearch.addEventListener("input", () => renderSiteManager());
+
+  const smgrStartSel = byId("smgr-start-selected-btn");
+  const smgrStopSel = byId("smgr-stop-selected-btn");
+  const smgrRefresh = byId("smgr-refresh-btn");
+  if (smgrStartSel) smgrStartSel.addEventListener("click", startSelectedSitesRunner);
+  if (smgrStopSel) smgrStopSel.addEventListener("click", stopSelectedSitesRunner);
+  if (smgrRefresh) {
+    smgrRefresh.addEventListener("click", async () => {
+      await refreshState();
+      await refreshSiteStatuses();
+      setStatus("smgr-status", "Site Manager refreshed.", "ok");
+    });
+  }
+
+  const smgrDetailStart = byId("smgr-detail-start");
+  const smgrDetailStop = byId("smgr-detail-stop");
+  const smgrDetailRecipe = byId("smgr-detail-recipe");
+  const smgrDetailBrowser = byId("smgr-detail-browser");
+  const smgrDetailFolder = byId("smgr-detail-folder-btn");
+  if (smgrDetailStart) smgrDetailStart.addEventListener("click", () => startSingleSiteRunner());
+  if (smgrDetailStop) smgrDetailStop.addEventListener("click", () => stopSingleSiteRunner());
+  if (smgrDetailRecipe) smgrDetailRecipe.addEventListener("click", runRecipeForActiveSite);
+  if (smgrDetailBrowser) smgrDetailBrowser.addEventListener("click", () => runSiteBrowserFor(value("active-site-select") || "chitchat"));
+  if (smgrDetailFolder) smgrDetailFolder.addEventListener("click", openActiveSiteFolder);
+
+  const sessRefresh = byId("sess-refresh-btn");
+  const sessCapBrowser = byId("sess-capture-browser-btn");
+  const sessCapAutoReg = byId("sess-capture-autoreg-btn");
+  const sessCapRecipe = byId("sess-capture-recipe-btn");
+  if (sessRefresh) {
+    sessRefresh.addEventListener("click", async () => {
+      await refreshState();
+      await refreshSiteStatuses();
+      setStatus("sess-status", "Session health refreshed.", "ok");
+    });
+  }
+  if (sessCapBrowser) {
+    sessCapBrowser.addEventListener("click", async () => {
+      const siteId = value("active-site-select") || "chitchat";
+      await runSiteBrowserFor(siteId);
+      setStatus("sess-capture-status", `Browser launched for sites/${siteId}/sessions/ capture.`, "ok");
+    });
+  }
+  if (sessCapAutoReg) {
+    sessCapAutoReg.addEventListener("click", async () => {
+      await autoRegisterSiteAccounts("sm");
+      setStatus("sess-capture-status", byId("sm-autoreg-status")?.textContent || "Guest session auto-registered.", "ok");
+    });
+  }
+  if (sessCapRecipe) {
+    sessCapRecipe.addEventListener("click", runRecipeForActiveSite);
+  }
 }
 
 function bindEvents() {

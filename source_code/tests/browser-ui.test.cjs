@@ -81,6 +81,100 @@ test('sidebar switches between the two pages', () => {
   } finally { dom.window.close(); }
 });
 
+test('3-tab dashboard structure below Target Site bar switches Control Center, Site Manager, and Sessions', async () => {
+  const startAllCalls = [];
+  const startSitesCalls = [];
+  const multiSnap = snapshot({
+    active_site: 'chitchat',
+    sites: [
+      { id: 'chitchat', name: 'ChitChat.gg', account_mode: 'browser_setup', account_count: 1, has_saved_session: true, start_url: 'https://app.chitchat.gg/text?auth=email', auth_mode: 'chitchat_jwt' },
+      { id: 'omezy', name: 'Omezy.io', account_mode: 'auto_register', account_count: 3, has_saved_session: true, start_url: 'https://omezy.io/text/', auth_mode: 'dom_only' },
+    ],
+  });
+  const { dom, w, d } = setup({
+    StartAll: async () => { startAllCalls.push(true); },
+    StartSites: async (list) => { startSitesCalls.push(list); },
+    GetSiteStatuses: async () => ({
+      chitchat: { site_id: 'chitchat', state: 'running', messages_sent: 4 },
+      omezy: { site_id: 'omezy', state: 'stopped', messages_sent: 0 },
+    }),
+  }, multiSnap);
+  try {
+    w.bindTabs();
+    w.fillForms(multiSnap);
+
+    // 1. Tab bar is placed directly below Target Site bar (.site-selector-box)
+    const siteBox = d.querySelector('.site-selector-box');
+    const tabBar = d.getElementById('dashboard-tab-bar');
+    assert.notEqual(siteBox, null);
+    assert.notEqual(tabBar, null);
+    assert.equal(siteBox.nextElementSibling, tabBar);
+
+    const tabButtons = [...d.querySelectorAll('.dash-tab-button')];
+    assert.deepEqual(tabButtons.map((b) => b.dataset.dashTab), ['control-center', 'site-manager', 'sessions']);
+    assert.match(tabButtons[0].textContent, /Control Center/);
+    assert.match(tabButtons[1].textContent, /Site Manager/);
+    assert.match(tabButtons[2].textContent, /Sessions/);
+
+    // 2. Default active tab is Tab 1 ("Control Center") and contains Show Mode & Background Bot
+    const pControl = d.getElementById('dash-panel-control-center');
+    const pSites = d.getElementById('dash-panel-site-manager');
+    const pSessions = d.getElementById('dash-panel-sessions');
+    assert.equal(pControl.classList.contains('active'), true);
+    assert.equal(pControl.hidden, false);
+    assert.equal(pSites.hidden, true);
+    assert.equal(pSessions.hidden, true);
+    assert.notEqual(pControl.querySelector('[data-panel="show"]'), null);
+    assert.notEqual(pControl.querySelector('[data-panel="bot"]'), null);
+    assert.equal(d.getElementById('control-center-sidebar-nav').hidden, false);
+
+    // 3. Clicking Tab 2 ("Site Manager") shows site grid + group view + per-site detail and hides Tab 1 & Tab 3
+    d.getElementById('dash-tab-site-manager').click();
+    assert.equal(d.getElementById('dash-tab-site-manager').classList.contains('active'), true);
+    assert.equal(d.getElementById('dash-tab-control-center').classList.contains('active'), false);
+    assert.equal(pSites.classList.contains('active'), true);
+    assert.equal(pSites.hidden, false);
+    assert.equal(pControl.hidden, true);
+    assert.equal(pSessions.hidden, true);
+    assert.equal(d.getElementById('control-center-sidebar-nav').hidden, true);
+    assert.equal(d.querySelectorAll('#smgr-site-grid .smgr-grid-item').length, 2);
+    assert.match(d.getElementById('smgr-detail-title').textContent, /ChitChat\.gg/);
+
+    // Group filter in Site Manager
+    d.getElementById('smgr-group-c').click();
+    assert.equal(d.getElementById('smgr-group-c').classList.contains('active'), true);
+    assert.equal(d.querySelectorAll('#smgr-site-grid .smgr-grid-item').length, 1);
+    d.getElementById('smgr-group-all').click();
+    assert.equal(d.querySelectorAll('#smgr-site-grid .smgr-grid-item').length, 2);
+
+    // Start Selected in Site Manager
+    d.getElementById('smgr-start-selected-btn').click();
+    await tick();
+    assert.deepEqual(JSON.parse(JSON.stringify(startSitesCalls)), [['chitchat']]);
+
+    // 4. Clicking Tab 3 ("Sessions") shows session capture + health monitor and hides Tab 1 & Tab 2
+    d.getElementById('dash-tab-sessions').click();
+    assert.equal(d.getElementById('dash-tab-sessions').classList.contains('active'), true);
+    assert.equal(pSessions.classList.contains('active'), true);
+    assert.equal(pSessions.hidden, false);
+    assert.equal(pControl.hidden, true);
+    assert.equal(pSites.hidden, true);
+    assert.equal(d.getElementById('sess-stat-total').textContent, '2');
+    assert.equal(d.getElementById('sess-stat-saved').textContent, '2');
+    assert.equal(d.querySelectorAll('#sess-health-list .site-session-row').length, 2);
+
+    // 5. Clicking Tab 1 ("Control Center") returns to Control Center and Start All works
+    d.getElementById('dash-tab-control-center').click();
+    assert.equal(d.getElementById('dash-tab-control-center').classList.contains('active'), true);
+    assert.equal(pControl.hidden, false);
+    assert.equal(pSites.hidden, true);
+    assert.equal(pSessions.hidden, true);
+    d.getElementById('cc-start-all-btn').click();
+    await tick();
+    assert.equal(startAllCalls.length, 1);
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {
