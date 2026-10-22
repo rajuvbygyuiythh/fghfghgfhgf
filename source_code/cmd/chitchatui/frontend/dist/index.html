@@ -779,23 +779,113 @@
           </section>
 
           <section class="card smgr-detail-card open" id="smgr-site-detail" aria-label="Per-Site Detail">
-            <div class="account-card-head">
-              <h2 id="smgr-detail-title">ChitChat.gg (chitchat)</h2>
-              <span id="smgr-detail-status-badge" class="mode-badge">stopped</span>
+            <div class="account-card-head smgr-detail-head">
+              <div>
+                <h2 id="smgr-detail-title">ChitChat.gg (chitchat)</h2>
+                <p id="smgr-detail-url" class="hint-text">https://app.chitchat.gg/text?auth=email</p>
+              </div>
+              <div class="smgr-detail-head-right">
+                <span id="smgr-detail-status-badge" class="smgr-status-badge status-stopped">stopped</span>
+                <button type="button" id="smgr-detail-close-btn" class="site-mini-btn smgr-detail-close-btn" aria-label="Close detail panel" title="Close detail panel">&#10005;</button>
+              </div>
             </div>
-            <p id="smgr-detail-url" class="hint-text">https://app.chitchat.gg/text?auth=email</p>
+
             <div class="smgr-detail-meta">
+              <div class="smgr-detail-row"><span>Group Badge</span><strong id="smgr-detail-group">Group C · browser_setup</strong></div>
+              <div class="smgr-detail-row"><span>Connection Type</span><code id="smgr-detail-conn-type">websocket</code></div>
               <div class="smgr-detail-row"><span>Isolated Folder</span><code id="smgr-detail-folder">sites/chitchat/</code></div>
-              <div class="smgr-detail-row"><span>Group / Mode</span><strong id="smgr-detail-group">Group C · browser_setup</strong></div>
-              <div class="smgr-detail-row"><span>Saved Sessions</span><strong id="smgr-detail-session">0 saved</strong></div>
+              <div class="smgr-detail-row"><span>Session Status</span><strong id="smgr-detail-session">✅ valid</strong></div>
+              <div class="smgr-detail-row"><span>Session Captured</span><span id="smgr-detail-session-captured">Not captured yet</span></div>
+              <div class="smgr-detail-row"><span>Session Expiry</span><span id="smgr-detail-session-expiry">N/A</span></div>
               <div class="smgr-detail-row"><span>Settings Source</span><code id="smgr-detail-override">sites/_global/settings.json</code></div>
             </div>
-            <div class="form-actions">
-              <button type="button" id="smgr-detail-start" class="primary-button">&#9654; Start Site</button>
-              <button type="button" id="smgr-detail-stop" class="secondary-button">&#9632; Stop Site</button>
-              <button type="button" id="smgr-detail-recipe" class="secondary-button">&#9881; Run Recipe</button>
-              <button type="button" id="smgr-detail-browser" class="secondary-button">&#127760; Browser</button>
+
+            <div class="smgr-detail-stats-grid" aria-label="Per-site runtime stats">
+              <div class="smgr-stat-box">
+                <span>Messages Sent</span>
+                <strong id="smgr-detail-stat-sent">0</strong>
+              </div>
+              <div class="smgr-stat-box">
+                <span>Messages Received</span>
+                <strong id="smgr-detail-stat-recv">0</strong>
+              </div>
+              <div class="smgr-stat-box">
+                <span>Uptime</span>
+                <strong id="smgr-detail-stat-uptime">0s</strong>
+              </div>
+              <div class="smgr-stat-box">
+                <span>Error Count</span>
+                <strong id="smgr-detail-stat-errors">0</strong>
+              </div>
+            </div>
+
+            <div class="smgr-detail-error-box">
+              <span class="mode-label">Last Error Message</span>
+              <p id="smgr-detail-last-error" class="hint-text">No errors recorded.</p>
+            </div>
+
+            <div class="smgr-override-section" aria-label="Per-site settings overrides">
+              <div class="account-card-head">
+                <h3>Per-Site Overrides (Instant Apply)</h3>
+                <span class="site-session-badge">sites/&lt;id&gt;/settings_override.json</span>
+              </div>
+
+              <div class="smgr-override-block">
+                <label class="checkbox-row">
+                  <input type="checkbox" id="smgr-ov-proxy-enabled">
+                  <span>Custom Proxy Override</span>
+                </label>
+                <div id="smgr-ov-proxy-row" hidden>
+                  <input type="text" id="smgr-ov-proxy-input" placeholder="socks5://user:pass@1.2.3.4:1080 or host:port" autocomplete="off">
+                </div>
+              </div>
+
+              <div class="smgr-override-block">
+                <label class="checkbox-row">
+                  <input type="checkbox" id="smgr-ov-mode-enabled">
+                  <span>Custom Message Mode Override</span>
+                </label>
+                <div id="smgr-ov-mode-row" hidden>
+                  <select id="smgr-ov-mode-select" aria-label="Custom message mode">
+                    <option value="single">Single Sequence</option>
+                    <option value="folder">Folder Sequences</option>
+                    <option value="eva_chat_flow">EVAChat Flow</option>
+                    <option value="api_chat">API Chat</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="smgr-override-block">
+                <label class="checkbox-row">
+                  <input type="checkbox" id="smgr-ov-delay-enabled">
+                  <span>Custom Reply Delay Override (seconds)</span>
+                </label>
+                <div id="smgr-ov-delay-row" class="form-grid two-column" hidden>
+                  <label>
+                    <span>Reply delay min (s)</span>
+                    <input type="number" id="smgr-ov-delay-min" min="0" max="86400" step="1" value="3">
+                  </label>
+                  <label>
+                    <span>Reply delay max (s)</span>
+                    <input type="number" id="smgr-ov-delay-max" min="0" max="86400" step="1" value="7">
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-actions inline">
+                <button type="button" id="smgr-ov-save-btn" class="primary-button">Save Override</button>
+                <button type="button" id="smgr-ov-clear-btn" class="secondary-button">Use Global Defaults</button>
+              </div>
+              <p id="smgr-ov-status" class="status-line" role="status" aria-live="polite">Following global settings.</p>
+            </div>
+
+            <div class="form-actions smgr-detail-actions">
+              <button type="button" id="smgr-detail-start" class="primary-button">&#9654; Start</button>
+              <button type="button" id="smgr-detail-stop" class="secondary-button">&#9632; Stop</button>
+              <button type="button" id="smgr-detail-browser" class="secondary-button">&#127760; Open Browser</button>
+              <button type="button" id="smgr-detail-refresh-session" class="secondary-button">&#8635; Refresh Session</button>
               <button type="button" id="smgr-detail-folder-btn" class="site-mini-btn">Open Folder</button>
+              <button type="button" id="smgr-detail-recipe" class="site-mini-btn">&#9881; Run Recipe</button>
             </div>
           </section>
         </div>

@@ -946,40 +946,188 @@ async function openSiteDetailPanel(siteId) {
     detailCard.classList.add("open");
   }
   await selectTargetSite(siteId);
+  await loadSiteDetailView(siteId);
 }
 
-function renderSiteDetail(activeObj) {
-  if (!activeObj) return;
-  const siteId = activeObj.id || "chitchat";
-  const group = siteGroupCode(activeObj);
-  const accMode = siteAccountMode(activeObj);
-  const sessState = resolveSiteSessionState(activeObj);
-  const runnerState = resolveSiteRunnerState(siteId);
+function closeSiteDetailPanel() {
+  state.detailOpen = false;
+  const detailCard = byId("smgr-site-detail");
+  if (detailCard) {
+    detailCard.classList.remove("open");
+    detailCard.classList.add("closed");
+  }
+}
+
+function syncOverrideToggleRows() {
+  const proxyChk = byId("smgr-ov-proxy-enabled");
+  const modeChk = byId("smgr-ov-mode-enabled");
+  const delayChk = byId("smgr-ov-delay-enabled");
+  const proxyRow = byId("smgr-ov-proxy-row");
+  const modeRow = byId("smgr-ov-mode-row");
+  const delayRow = byId("smgr-ov-delay-row");
+  if (proxyRow && proxyChk) proxyRow.hidden = !proxyChk.checked;
+  if (modeRow && modeChk) modeRow.hidden = !modeChk.checked;
+  if (delayRow && delayChk) delayRow.hidden = !delayChk.checked;
+}
+
+function applySiteDetailView(detail) {
+  if (!detail) return;
+  const siteId = detail.site_id || detail.id || "chitchat";
+  const grp = String(detail.group || siteGroupCode(detail)).toUpperCase();
+  const accMode = siteAccountMode(detail);
+  const sessState = detail.session_status || resolveSiteSessionState(detail);
+  const runnerState = detail.runner_status || resolveSiteRunnerState(siteId);
+  const connType = detail.connection_type || (grp === "A" ? "websocket" : grp === "B" || grp === "C" ? "api" : "dom");
 
   const titleEl = byId("smgr-detail-title");
   const badgeEl = byId("smgr-detail-status-badge");
   const urlEl = byId("smgr-detail-url");
   const folderEl = byId("smgr-detail-folder");
   const groupEl = byId("smgr-detail-group");
+  const connEl = byId("smgr-detail-conn-type");
   const sessionEl = byId("smgr-detail-session");
+  const capturedEl = byId("smgr-detail-session-captured");
+  const expiryEl = byId("smgr-detail-session-expiry");
   const overrideEl = byId("smgr-detail-override");
+  const sentEl = byId("smgr-detail-stat-sent");
+  const recvEl = byId("smgr-detail-stat-recv");
+  const uptimeEl = byId("smgr-detail-stat-uptime");
+  const errorsEl = byId("smgr-detail-stat-errors");
+  const lastErrEl = byId("smgr-detail-last-error");
 
-  if (titleEl) titleEl.textContent = `${activeObj.name || siteId} (${siteId})`;
+  if (titleEl) titleEl.textContent = `${detail.name || siteId} (${siteId})`;
   if (badgeEl) {
     badgeEl.textContent = runnerState;
     badgeEl.className = `smgr-status-badge status-${runnerState}`;
   }
-  if (urlEl) urlEl.textContent = activeObj.start_url || "";
+  if (urlEl) urlEl.textContent = detail.start_url || "";
   if (folderEl) folderEl.textContent = `sites/${siteId}/`;
-  if (groupEl) groupEl.textContent = `Group ${group} · ${accMode}`;
+  if (groupEl) groupEl.textContent = `Group ${grp} · ${accMode}`;
+  if (connEl) connEl.textContent = connType;
   if (sessionEl) {
-    sessionEl.textContent = `${sessionBadgeText(sessState)} · ${activeObj.account_count || (sessState === "missing" ? 0 : 1)} saved in sites/${siteId}/sessions/`;
+    sessionEl.textContent = `${sessionBadgeText(sessState)} · ${detail.account_count ?? (sessState === "missing" ? 0 : 1)} saved in sites/${siteId}/sessions/`;
   }
+  if (capturedEl) {
+    capturedEl.textContent = detail.session_captured_at || detail.session_saved_at || "Not captured yet";
+  }
+  if (expiryEl) {
+    expiryEl.textContent = detail.session_expires_at || (sessState === "valid" ? "24h rolling window" : "N/A");
+  }
+
+  const st = state.siteStatuses[siteId] || {};
+  const stats = st.stats || {};
+  if (sentEl) sentEl.textContent = String(detail.messages_sent ?? stats.messages_sent ?? st.messages_sent ?? 0);
+  if (recvEl) recvEl.textContent = String(detail.messages_received ?? stats.messages_received ?? 0);
+  if (uptimeEl) uptimeEl.textContent = detail.uptime_text || (runnerState === "running" ? "Active" : "0s");
+  if (errorsEl) errorsEl.textContent = String(detail.error_count ?? st.total_errors ?? st.consecutive_errors ?? 0);
+
+  const lastErr = detail.last_error || st.last_error || "";
+  if (lastErrEl) {
+    lastErrEl.textContent = lastErr ? `${detail.last_error_type || st.last_error_type ? `[${detail.last_error_type || st.last_error_type}] ` : ""}${lastErr}` : "No errors recorded.";
+  }
+
+  const ov = detail.override || {};
+  const hasOv = Boolean(detail.has_override || ov.proxy || ov.message_mode || ov.reply_delay);
   if (overrideEl) {
-    overrideEl.textContent = activeObj.has_override
+    overrideEl.textContent = hasOv
       ? `sites/${siteId}/settings_override.json`
       : "sites/_global/settings.json";
   }
+
+  if (detail.override !== undefined) {
+    const proxyChk = byId("smgr-ov-proxy-enabled");
+    const proxyInp = byId("smgr-ov-proxy-input");
+    const modeChk = byId("smgr-ov-mode-enabled");
+    const modeSel = byId("smgr-ov-mode-select");
+    const delayChk = byId("smgr-ov-delay-enabled");
+    const delayMin = byId("smgr-ov-delay-min");
+    const delayMax = byId("smgr-ov-delay-max");
+
+    if (proxyChk) proxyChk.checked = Boolean(ov.proxy && (ov.proxy.enabled || ov.proxy.entries));
+    if (proxyInp) proxyInp.value = ov.proxy?.entries || ov.proxy?.address || "";
+    if (modeChk) modeChk.checked = Boolean(ov.message_mode);
+    if (modeSel && ov.message_mode) modeSel.value = ov.message_mode;
+    if (delayChk) delayChk.checked = Boolean(ov.reply_delay);
+    if (delayMin && ov.reply_delay) delayMin.value = String(ov.reply_delay.min_seconds ?? 0);
+    if (delayMax && ov.reply_delay) delayMax.value = String(ov.reply_delay.max_seconds ?? 0);
+    syncOverrideToggleRows();
+    setStatus(
+      "smgr-ov-status",
+      hasOv ? `Active per-site override in sites/${siteId}/settings_override.json` : "Following global settings.",
+      hasOv ? "ok" : "",
+    );
+  }
+}
+
+async function loadSiteDetailView(siteId) {
+  const target = siteId || value("active-site-select") || "chitchat";
+  if (!backend() || typeof backend().GetSiteDetail !== "function") return;
+  try {
+    const detail = await invoke("GetSiteDetail", target);
+    if (detail) applySiteDetailView(detail);
+  } catch (_) { /* optional in lightweight mocks */ }
+}
+
+async function saveActiveSiteOverride() {
+  const siteId = value("active-site-select") || "chitchat";
+  const override = {};
+  if (byId("smgr-ov-proxy-enabled")?.checked) {
+    const rawProxy = value("smgr-ov-proxy-input");
+    override.proxy = { enabled: Boolean(rawProxy), entries: rawProxy };
+  }
+  if (byId("smgr-ov-mode-enabled")?.checked) {
+    override.message_mode = value("smgr-ov-mode-select") || "single";
+  }
+  if (byId("smgr-ov-delay-enabled")?.checked) {
+    const minSec = Number(byId("smgr-ov-delay-min")?.value ?? 0);
+    const maxSec = Number(byId("smgr-ov-delay-max")?.value ?? 0);
+    if (!Number.isInteger(minSec) || !Number.isInteger(maxSec) || minSec < 0 || maxSec < minSec) {
+      setStatus("smgr-ov-status", "Reply delay min/max must be valid whole seconds (min <= max).", "error");
+      return;
+    }
+    override.reply_delay = { min_seconds: minSec, max_seconds: maxSec };
+  }
+  try {
+    setStatus("smgr-ov-status", `Saving override to sites/${siteId}/settings_override.json…`);
+    const updated = await invoke("SaveSiteOverride", siteId, override);
+    if (updated) applySiteDetailView(updated);
+    setStatus("smgr-ov-status", `Saved override for sites/${siteId}/ and applied immediately.`, "ok");
+  } catch (error) {
+    setStatus("smgr-ov-status", error.message || String(error), "error");
+  }
+}
+
+async function clearActiveSiteOverride() {
+  const siteId = value("active-site-select") || "chitchat";
+  try {
+    await invoke("ClearSiteSettingsOverride", siteId);
+    if (byId("smgr-ov-proxy-enabled")) byId("smgr-ov-proxy-enabled").checked = false;
+    if (byId("smgr-ov-mode-enabled")) byId("smgr-ov-mode-enabled").checked = false;
+    if (byId("smgr-ov-delay-enabled")) byId("smgr-ov-delay-enabled").checked = false;
+    syncOverrideToggleRows();
+    await loadSiteDetailView(siteId);
+    setStatus("smgr-ov-status", `Cleared override for sites/${siteId}/ — now using global settings.`, "ok");
+  } catch (error) {
+    setStatus("smgr-ov-status", error.message || String(error), "error");
+  }
+}
+
+async function refreshActiveSiteSession() {
+  const siteId = value("active-site-select") || "chitchat";
+  try {
+    setStatus("smgr-status", `Refreshing session status for sites/${siteId}/…`);
+    const detail = await invoke("RefreshSiteSession", siteId);
+    if (detail) applySiteDetailView(detail);
+    await refreshState();
+    setStatus("smgr-status", `Session refreshed for sites/${siteId}/`, "ok");
+  } catch (error) {
+    setStatus("smgr-status", error.message || String(error), "error");
+  }
+}
+
+function renderSiteDetail(activeObj) {
+  if (!activeObj) return;
+  applySiteDetailView(activeObj);
 }
 
 function renderSiteManager() {
@@ -2061,12 +2209,45 @@ function bindActions() {
   const smgrDetailStop = byId("smgr-detail-stop");
   const smgrDetailRecipe = byId("smgr-detail-recipe");
   const smgrDetailBrowser = byId("smgr-detail-browser");
+  const smgrDetailRefreshSession = byId("smgr-detail-refresh-session");
   const smgrDetailFolder = byId("smgr-detail-folder-btn");
+  const smgrDetailClose = byId("smgr-detail-close-btn");
   if (smgrDetailStart) smgrDetailStart.addEventListener("click", () => startSingleSiteRunner());
   if (smgrDetailStop) smgrDetailStop.addEventListener("click", () => stopSingleSiteRunner());
   if (smgrDetailRecipe) smgrDetailRecipe.addEventListener("click", runRecipeForActiveSite);
   if (smgrDetailBrowser) smgrDetailBrowser.addEventListener("click", () => runSiteBrowserFor(value("active-site-select") || "chitchat"));
+  if (smgrDetailRefreshSession) smgrDetailRefreshSession.addEventListener("click", refreshActiveSiteSession);
   if (smgrDetailFolder) smgrDetailFolder.addEventListener("click", openActiveSiteFolder);
+  if (smgrDetailClose) smgrDetailClose.addEventListener("click", closeSiteDetailPanel);
+
+  const ovProxyChk = byId("smgr-ov-proxy-enabled");
+  const ovModeChk = byId("smgr-ov-mode-enabled");
+  const ovDelayChk = byId("smgr-ov-delay-enabled");
+  const ovSaveBtn = byId("smgr-ov-save-btn");
+  const ovClearBtn = byId("smgr-ov-clear-btn");
+  if (ovProxyChk) ovProxyChk.addEventListener("change", syncOverrideToggleRows);
+  if (ovModeChk) ovModeChk.addEventListener("change", syncOverrideToggleRows);
+  if (ovDelayChk) ovDelayChk.addEventListener("change", syncOverrideToggleRows);
+  if (ovSaveBtn) ovSaveBtn.addEventListener("click", saveActiveSiteOverride);
+  if (ovClearBtn) ovClearBtn.addEventListener("click", clearActiveSiteOverride);
+
+  // Close slide-out detail panel when clicking outside the detail card and site rows
+  document.addEventListener("click", (event) => {
+    if (state.dashTab !== "site-manager" || !state.detailOpen) return;
+    const detailCard = byId("smgr-site-detail");
+    if (!detailCard || detailCard.classList.contains("closed")) return;
+    const target = event.target;
+    if (!target || typeof target.closest !== "function") return;
+    if (
+      detailCard.contains(target) ||
+      target.closest(".smgr-site-row") ||
+      target.closest(".smgr-site-name-btn") ||
+      target.closest("[data-smgr-detail]")
+    ) {
+      return;
+    }
+    closeSiteDetailPanel();
+  });
 
   const sessRefresh = byId("sess-refresh-btn");
   const sessCapBrowser = byId("sess-capture-browser-btn");

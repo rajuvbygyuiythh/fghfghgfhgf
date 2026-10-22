@@ -34,9 +34,9 @@ Every agent working on this project MUST follow this strict 4-step workflow for 
 | **Prompt 5** | Phase 2: Recipe + Runner | Site Runner Supervisor | 🔴 Critical | ✅ **DONE** (`0493e40`) | `source_code/internal/runner/supervisor.go`, `supervisor_test.go` |
 | **Prompt 6** | Phase 2: Recipe + Runner | Connect Supervisor to Existing Engine | 🔴 Critical | ✅ **DONE** (`38c2d98`, `da58842`) | `source_code/internal/runner/supervisor.go`, `internal/bot/*`, `app.go` |
 | **Prompt 7** | Phase 3: Dashboard UI | Dashboard 3-Tab Structure | 🟡 High | ✅ **DONE** (`45500f5`) | `source_code/cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}` |
-| **Prompt 8** | Phase 3: Dashboard UI | Site Grid (Tab 2) | 🟡 High | ✅ **DONE** | `source_code/app.go`, `internal/model/ui.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
-| **Prompt 9** | Phase 3: Dashboard UI | Per-Site Detail + Overrides | 🟡 Medium | ⏳ **IN PROGRESS (Awaiting Approval)** | `source_code/app.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}` |
-| **Prompt 10** | Phase 4: Session + Browserless | Session Capture (Tab 3) | 🔴 Critical | ⏳ **PENDING** | `source_code/internal/sites/session_store.go`, `app.go`, `index.html`, `app.js` |
+| **Prompt 8** | Phase 3: Dashboard UI | Site Grid (Tab 2) | 🟡 High | ✅ **DONE** (`bc8233c`) | `source_code/app.go`, `internal/model/ui.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs` |
+| **Prompt 9** | Phase 3: Dashboard UI | Per-Site Detail + Overrides | 🟡 Medium | ✅ **DONE** | `source_code/app.go`, `internal/runner/supervisor.go`, `cmd/chitchatui/frontend/dist/{index.html,styles.css,app.js}`, `tests/browser-ui.test.cjs`, `supervisor_app_test.go` |
+| **Prompt 10** | Phase 4: Session + Browserless | Session Capture (Tab 3) | 🔴 Critical | ⏳ **IN PROGRESS (Awaiting Approval)** | `source_code/internal/sites/session_store.go`, `app.go`, `index.html`, `app.js` |
 | **Prompt 11** | Phase 4: Session + Browserless | Browserless Chat | 🔴 Critical | ⏳ **PENDING** | `source_code/internal/runner/browserless.go`, `supervisor.go`, `internal/bot/*` |
 | **Prompt 12** | Phase 5: Self-Recovery + Polish | Agent Self-Recovery (Scenarios A–E) | 🔴 MOST IMPORTANT | ⏳ **PENDING** | `source_code/internal/runner/recovery.go`, `supervisor.go`, `app.go`, UI |
 | **Prompt 13** | Phase 5: Self-Recovery + Polish | Combined Live Log + Error Dashboard | 🟡 Medium | ⏳ **PENDING** | `source_code/app.go`, `show_log.go`, `bot_log.go`, `index.html`, `app.js` |

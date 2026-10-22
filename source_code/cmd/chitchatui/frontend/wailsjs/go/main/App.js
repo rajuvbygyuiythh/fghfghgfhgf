@@ -74,6 +74,18 @@ export function GetSiteSettings(arg1) {
   return window['go']['main']['App']['GetSiteSettings'](arg1);
 }
 
+export function GetSiteDetail(arg1) {
+  return window['go']['main']['App']['GetSiteDetail'](arg1);
+}
+
+export function SaveSiteOverride(arg1, arg2) {
+  return window['go']['main']['App']['SaveSiteOverride'](arg1, arg2);
+}
+
+export function RefreshSiteSession(arg1) {
+  return window['go']['main']['App']['RefreshSiteSession'](arg1);
+}
+
 export function GetLocalTestChatState() {
   return window['go']['main']['App']['GetLocalTestChatState']();
 }

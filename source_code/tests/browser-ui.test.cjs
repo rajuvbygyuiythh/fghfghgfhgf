@@ -324,6 +324,147 @@ test('Prompt 8: Site Grid (Tab 2) collapsible A-E groups, 5 status badges, 3 ses
   } finally { dom.window.close(); }
 });
 
+test('Prompt 9: Per-Site Detail slide-out panel renders stats, last error, session expiry, saves overrides immediately, and closes on X or outside click', async () => {
+  const savedOverrides = [];
+  const refreshedSessions = [];
+  const openedFolders = [];
+
+  const mockSites = [
+    { id: 'omezy', name: 'Omezy.io', group: 'B', account_mode: 'auto_register', account_count: 2, has_saved_session: true, session_status: 'valid', start_url: 'https://omezy.io/text/' },
+  ];
+  const snap = snapshot({ active_site: 'omezy', sites: mockSites });
+
+  const { dom, w, d } = setup({
+    SelectSite: async (id) => mockSites[0],
+    GetSiteDetail: async (id) => ({
+      site_id: id,
+      name: 'Omezy.io',
+      start_url: 'https://omezy.io/text/',
+      group: 'B',
+      group_name: 'Auto-Signup',
+      connection_type: 'api',
+      account_mode: 'auto_register',
+      account_count: 2,
+      session_status: 'valid',
+      session_captured_at: '2026-10-22T08:00:00Z',
+      session_expires_at: '2026-10-23T08:00:00Z',
+      runner_status: 'running',
+      running: true,
+      messages_sent: 18,
+      messages_received: 14,
+      uptime_seconds: 125,
+      uptime_text: '2m 5s',
+      error_count: 2,
+      last_error: 'rate limit backoff',
+      last_error_type: 'timeout',
+      has_override: false,
+      override: {},
+    }),
+    SaveSiteOverride: async (id, ov) => {
+      savedOverrides.push({ id, ov: JSON.parse(JSON.stringify(ov)) });
+      return {
+        site_id: id,
+        name: 'Omezy.io',
+        start_url: 'https://omezy.io/text/',
+        group: 'B',
+        connection_type: 'api',
+        account_mode: 'auto_register',
+        account_count: 2,
+        session_status: 'valid',
+        session_captured_at: '2026-10-22T08:00:00Z',
+        session_expires_at: '2026-10-23T08:00:00Z',
+        runner_status: 'running',
+        messages_sent: 19,
+        messages_received: 15,
+        uptime_text: '2m 10s',
+        error_count: 2,
+        last_error: 'rate limit backoff',
+        last_error_type: 'timeout',
+        has_override: true,
+        override: ov,
+      };
+    },
+    RefreshSiteSession: async (id) => {
+      refreshedSessions.push(id);
+      return { site_id: id, name: 'Omezy.io', group: 'B', session_status: 'valid', session_captured_at: '2026-10-22T09:00:00Z' };
+    },
+    OpenSiteFolder: async (id) => {
+      openedFolders.push(id);
+      return `sites/${id}/`;
+    },
+  }, snap);
+
+  try {
+    w.bindTabs();
+    w.fillForms(snap);
+    d.getElementById('dash-tab-site-manager').click();
+
+    // Click site name to open slide-out detail panel and load GetSiteDetail
+    d.querySelector('[data-site-name="omezy"]').click();
+    await new Promise((r) => setTimeout(r, 15));
+
+    const detailPanel = d.getElementById('smgr-site-detail');
+    assert.equal(detailPanel.classList.contains('open'), true);
+    assert.equal(d.getElementById('smgr-detail-conn-type').textContent, 'api');
+    assert.equal(d.getElementById('smgr-detail-session-captured').textContent, '2026-10-22T08:00:00Z');
+    assert.equal(d.getElementById('smgr-detail-session-expiry').textContent, '2026-10-23T08:00:00Z');
+    assert.equal(d.getElementById('smgr-detail-stat-sent').textContent, '18');
+    assert.equal(d.getElementById('smgr-detail-stat-recv').textContent, '14');
+    assert.equal(d.getElementById('smgr-detail-stat-uptime').textContent, '2m 5s');
+    assert.equal(d.getElementById('smgr-detail-stat-errors').textContent, '2');
+    assert.match(d.getElementById('smgr-detail-last-error').textContent, /\[timeout\] rate limit backoff/);
+
+    // Toggle Custom Proxy, Custom Message Mode, and Custom Reply Delay overrides
+    const proxyChk = d.getElementById('smgr-ov-proxy-enabled');
+    const modeChk = d.getElementById('smgr-ov-mode-enabled');
+    const delayChk = d.getElementById('smgr-ov-delay-enabled');
+    proxyChk.checked = true;
+    proxyChk.dispatchEvent(new w.Event('change'));
+    assert.equal(d.getElementById('smgr-ov-proxy-row').hidden, false);
+    d.getElementById('smgr-ov-proxy-input').value = 'socks5://10.0.0.1:1080';
+
+    modeChk.checked = true;
+    modeChk.dispatchEvent(new w.Event('change'));
+    assert.equal(d.getElementById('smgr-ov-mode-row').hidden, false);
+    d.getElementById('smgr-ov-mode-select').value = 'eva_chat_flow';
+
+    delayChk.checked = true;
+    delayChk.dispatchEvent(new w.Event('change'));
+    assert.equal(d.getElementById('smgr-ov-delay-row').hidden, false);
+    d.getElementById('smgr-ov-delay-min').value = '2';
+    d.getElementById('smgr-ov-delay-max').value = '6';
+
+    d.getElementById('smgr-ov-save-btn').click();
+    await new Promise((r) => setTimeout(r, 15));
+    assert.equal(savedOverrides.length, 1);
+    assert.equal(savedOverrides[0].id, 'omezy');
+    assert.equal(savedOverrides[0].ov.message_mode, 'eva_chat_flow');
+    assert.deepEqual(savedOverrides[0].ov.reply_delay, { min_seconds: 2, max_seconds: 6 });
+    assert.equal(savedOverrides[0].ov.proxy.entries, 'socks5://10.0.0.1:1080');
+    assert.equal(d.getElementById('smgr-detail-override').textContent, 'sites/omezy/settings_override.json');
+
+    // Refresh Session and Open Folder buttons
+    d.getElementById('smgr-detail-refresh-session').click();
+    await tick();
+    assert.deepEqual(refreshedSessions, ['omezy']);
+
+    d.getElementById('smgr-detail-folder-btn').click();
+    await tick();
+    assert.deepEqual(openedFolders, ['omezy']);
+
+    // Close via X button
+    d.getElementById('smgr-detail-close-btn').click();
+    assert.equal(detailPanel.classList.contains('closed'), true);
+
+    // Re-open via Detail button, then close via outside click
+    d.querySelector('[data-smgr-detail="omezy"]').click();
+    await tick();
+    assert.equal(detailPanel.classList.contains('open'), true);
+    d.getElementById('smgr-total-badge').click();
+    assert.equal(detailPanel.classList.contains('closed'), true);
+  } finally { dom.window.close(); }
+});
+
 test('chat mode reveals exactly one editor per page, independently', () => {
   const { dom, w, d, snap } = setup();
   try {

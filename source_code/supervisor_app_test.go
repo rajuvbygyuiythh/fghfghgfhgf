@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	"chitchat-wails/internal/settings"
 )
 
 func TestAppStartSitesStopSitesGetSiteStatusesAndBackwardCompat(t *testing.T) {
@@ -95,3 +97,55 @@ func TestAppStartSitesStopSitesGetSiteStatusesAndBackwardCompat(t *testing.T) {
 		}
 	}
 }
+
+func TestAppGetSiteDetailAndSaveSiteOverrideImmediateApply(t *testing.T) {
+	dataDir := t.TempDir()
+	app, err := NewApp(dataDir)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	defer app.shutdown(nil)
+
+	if err := app.StartSiteRunner("omezy"); err != nil {
+		t.Fatalf("StartSiteRunner(omezy): %v", err)
+	}
+	defer func() { _ = app.StopSiteRunner("omezy") }()
+
+	detail, err := app.GetSiteDetail("omezy")
+	if err != nil {
+		t.Fatalf("GetSiteDetail(omezy): %v", err)
+	}
+	if detail.SiteID != "omezy" || !detail.Running || detail.RunnerStatus != "running" {
+		t.Fatalf("unexpected GetSiteDetail: %+v", detail)
+	}
+	if detail.HasOverride {
+		t.Fatalf("expected HasOverride=false initially")
+	}
+
+	updated, err := app.SaveSiteOverride("omezy", settings.Override{
+		MessageMode: "eva_chat_flow",
+		ReplyDelay:  &settings.ReplyDelaySettings{MinSeconds: 2, MaxSeconds: 6},
+		Proxy:       &settings.ProxySettings{Enabled: true, Entries: "socks5://10.0.0.1:1080"},
+	})
+	if err != nil {
+		t.Fatalf("SaveSiteOverride(omezy): %v", err)
+	}
+	if !updated.HasOverride || updated.Override.MessageMode != "eva_chat_flow" {
+		t.Fatalf("expected override applied in SiteDetailView, got %+v", updated)
+	}
+
+	// Verify running site runner reloaded its effective settings immediately
+	st, err := app.GetSiteStatus("omezy")
+	if err != nil {
+		t.Fatalf("GetSiteStatus(omezy): %v", err)
+	}
+	if !st.Running || st.ChatMode != "eva_chat_flow" {
+		t.Fatalf("expected running site ChatMode immediately updated to eva_chat_flow, got %+v", st)
+	}
+
+	refreshed, err := app.RefreshSiteSession("omezy")
+	if err != nil || refreshed.SiteID != "omezy" {
+		t.Fatalf("RefreshSiteSession(omezy): %v (%+v)", err, refreshed)
+	}
+}
+

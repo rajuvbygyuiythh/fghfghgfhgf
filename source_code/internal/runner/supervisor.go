@@ -304,6 +304,8 @@ type siteRunner struct {
 	siteID          string
 	siteCtx         sites.SiteContext
 	siteCfg         sites.Config
+	eff             settings.Effective
+	botCfg          bot.Config
 	status          SiteStatus
 	cancel          context.CancelFunc
 	done            chan struct{}
@@ -465,20 +467,27 @@ func (s *Supervisor) getOrCreateRunner(siteID string) (*siteRunner, error) {
 	return sr, nil
 }
 
-// ReloadSiteConfig refreshes a site's Config from sites/<site_id>/site.json.
+// ReloadSiteConfig refreshes a site's Config and effective settings (including
+// per-site overrides) immediately on a running or stopped runner.
 func (s *Supervisor) ReloadSiteConfig(siteID string) error {
 	sr, err := s.getOrCreateRunner(siteID)
 	if err != nil {
 		return err
 	}
+	sr.mu.Lock()
+	defer sr.mu.Unlock()
 	if loaded, loadErr := sites.LoadSite(s.dataDir, sr.siteID); loadErr == nil {
-		sr.mu.Lock()
 		sr.siteCfg = loaded
 		sr.status.SiteName = loaded.Name
 		sr.status.Group = loaded.Classification.Group
 		sr.status.GroupName = loaded.Classification.GroupName
-		sr.status.Transport = ResolveSiteTransport(loaded, bot.Config{}, s.useLiveBrowser)
-		sr.mu.Unlock()
+	}
+	if eff, chatSession, botCfg, _, _, prepErr := s.prepareSiteExecution(sr.siteCtx, sr.siteCfg, sr.status.Profile); prepErr == nil {
+		sr.eff = eff
+		sr.botCfg = botCfg
+		sr.chatSession = chatSession
+		sr.status.ChatMode = botCfg.ChatMode
+		sr.status.Transport = ResolveSiteTransport(sr.siteCfg, botCfg, s.useLiveBrowser)
 	}
 	return nil
 }
@@ -551,6 +560,8 @@ func (s *Supervisor) StartSite(siteID string) error {
 
 	sr.cancel = cancel
 	sr.done = done
+	sr.eff = eff
+	sr.botCfg = botCfg
 	sr.chatSession = chatSession
 	sr.domSeenIDs = make(map[string]bool)
 	sr.domConvID = ""
@@ -982,17 +993,21 @@ func (s *Supervisor) runSiteLoop(
 		cycleNum++
 		sr.mu.Lock()
 		bConn := sr.browserConn
+		curSiteCfg := sr.siteCfg
+		curEff := sr.eff
+		curBotCfg := sr.botCfg
+		curChatSession := sr.chatSession
 		sr.mu.Unlock()
 		cc := &CycleContext{
 			SiteID:       sr.siteID,
-			Profile:      botCfg.Profile,
+			Profile:      curBotCfg.Profile,
 			Transport:    transport,
 			CycleNumber:  cycleNum,
 			SiteCtx:      sr.siteCtx,
-			SiteCfg:      sr.siteCfg,
-			EffectiveCfg: eff,
-			BotCfg:       botCfg,
-			ChatSession:  sr.chatSession,
+			SiteCfg:      curSiteCfg,
+			EffectiveCfg: curEff,
+			BotCfg:       curBotCfg,
+			ChatSession:  curChatSession,
 			Browser:      bConn,
 			Login:        login,
 		}

@@ -40,6 +40,12 @@ export function GetSiteDebugLog(arg1:string,arg2:number):Promise<Array<any>>;
 
 export function GetSiteSettings(arg1:string):Promise<any>;
 
+export function GetSiteDetail(arg1:string):Promise<any>;
+
+export function SaveSiteOverride(arg1:string,arg2:any):Promise<any>;
+
+export function RefreshSiteSession(arg1:string):Promise<any>;
+
 export function GetLocalTestChatState():Promise<any>;
 
 export function ListProfiles():Promise<Array<main.ProfileOption>>;

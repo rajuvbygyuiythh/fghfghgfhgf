@@ -1302,6 +1302,167 @@ func (a *App) ListSiteSettings() ([]settings.SiteSummary, error) {
 	return out, nil
 }
 
+// SiteDetailView holds the complete per-site detail payload for the right-side
+// slide-out panel in Site Manager (Prompt 9).
+type SiteDetailView struct {
+	SiteID            string             `json:"site_id"`
+	Name              string             `json:"name"`
+	StartURL          string             `json:"start_url"`
+	Group             string             `json:"group"`
+	GroupName         string             `json:"group_name"`
+	ConnectionType    string             `json:"connection_type"`
+	AccountMode       string             `json:"account_mode"`
+	AccountCount      int                `json:"account_count"`
+	SessionStatus     string             `json:"session_status"`
+	SessionCapturedAt string             `json:"session_captured_at,omitempty"`
+	SessionExpiresAt  string             `json:"session_expires_at,omitempty"`
+	SessionPath       string             `json:"session_path,omitempty"`
+	FolderPath        string             `json:"folder_path"`
+	RunnerStatus      string             `json:"runner_status"`
+	Running           bool               `json:"running"`
+	MessagesSent      int                `json:"messages_sent"`
+	MessagesReceived  int                `json:"messages_received"`
+	UptimeSeconds     int                `json:"uptime_seconds"`
+	UptimeText        string             `json:"uptime_text"`
+	ErrorCount        int                `json:"error_count"`
+	ConsecutiveErrors int                `json:"consecutive_errors"`
+	LastError         string             `json:"last_error,omitempty"`
+	LastErrorType     string             `json:"last_error_type,omitempty"`
+	HasOverride       bool               `json:"has_override"`
+	Override          settings.Override  `json:"override"`
+	Effective         settings.Effective `json:"effective"`
+}
+
+func formatUptime(seconds int) string {
+	if seconds <= 0 {
+		return "0s"
+	}
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
+	s := seconds % 60
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm %ds", h, m, s)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
+}
+
+// GetSiteDetail returns the full per-site detail view (identity, connection type,
+// session status/dates, live stats, last error, and per-site overrides) for Prompt 9.
+func (a *App) GetSiteDetail(siteID string) (SiteDetailView, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	cfg, err := sites.LoadSite(a.dataDir, siteID)
+	if err != nil {
+		return SiteDetailView{}, err
+	}
+	opt := toSiteOption(cfg)
+	st, _ := a.runnerSupervisor().GetStatus(cfg.ID)
+	connType := st.Transport
+	if connType == "" {
+		connType = runner.ResolveSiteTransport(cfg, bot.Config{}, false)
+	}
+
+	runnerState := st.Status
+	if runnerState == "" || runnerState == runner.StatusIdle {
+		runnerState = runner.StatusStopped
+	}
+	if strings.EqualFold(st.LastErrorType, runner.ErrorTypeBanned) {
+		runnerState = "banned"
+	}
+
+	var uptimeSec int
+	if st.Running && st.StartedAt != "" {
+		if started, parseErr := time.Parse(time.RFC3339Nano, st.StartedAt); parseErr == nil {
+			uptimeSec = int(time.Since(started).Seconds())
+			if uptimeSec < 1 {
+				uptimeSec = 1
+			}
+		}
+	}
+
+	capturedAt := strings.TrimSpace(cfg.SessionSavedAt)
+	var expiresAt string
+	if capturedAt != "" {
+		if ts, parseErr := time.Parse(time.RFC3339, capturedAt); parseErr == nil {
+			expiresAt = ts.Add(24 * time.Hour).UTC().Format(time.RFC3339)
+		}
+	}
+	if sessMeta, sessErr := sites.LoadIsolatedSiteSession(a.dataDir, cfg.ID); sessErr == nil {
+		if capturedAt == "" && sessMeta.UpdatedAt != "" {
+			capturedAt = sessMeta.UpdatedAt
+			if ts, parseErr := time.Parse(time.RFC3339, capturedAt); parseErr == nil {
+				expiresAt = ts.Add(24 * time.Hour).UTC().Format(time.RFC3339)
+			}
+		}
+	}
+
+	var ov settings.Override
+	if store := a.settingsStore(); store != nil {
+		if loadedOv, ovErr := store.LoadSiteOverride(cfg.ID); ovErr == nil {
+			ov = loadedOv.Redacted()
+		}
+	}
+	eff, _ := a.effectiveSiteSettings(cfg.ID)
+	eff = eff.Redacted()
+
+	return SiteDetailView{
+		SiteID:            cfg.ID,
+		Name:              cfg.Name,
+		StartURL:          cfg.StartURL,
+		Group:             cfg.Classification.Group,
+		GroupName:         cfg.Classification.GroupName,
+		ConnectionType:    connType,
+		AccountMode:       cfg.AccountMode,
+		AccountCount:      cfg.AccountCount,
+		SessionStatus:     opt.SessionStatus,
+		SessionCapturedAt: capturedAt,
+		SessionExpiresAt:  expiresAt,
+		SessionPath:       cfg.SessionPath,
+		FolderPath:        cfg.FolderPath,
+		RunnerStatus:      runnerState,
+		Running:           st.Running,
+		MessagesSent:      st.Stats.MessagesSent,
+		MessagesReceived:  st.Stats.MessagesReceived,
+		UptimeSeconds:     uptimeSec,
+		UptimeText:        formatUptime(uptimeSec),
+		ErrorCount:        st.TotalErrors,
+		ConsecutiveErrors: st.ConsecutiveErrors,
+		LastError:         st.LastError,
+		LastErrorType:     st.LastErrorType,
+		HasOverride:       !ov.IsEmpty(),
+		Override:          ov,
+		Effective:         eff,
+	}, nil
+}
+
+// SaveSiteOverride saves per-site overrides (custom proxy, custom message mode,
+// custom reply delay) to sites/<site_id>/settings_override.json and immediately
+// reloads the site runner so a running site applies the changes right away (Prompt 9).
+func (a *App) SaveSiteOverride(siteID string, override settings.Override) (SiteDetailView, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	if _, err := a.SaveSiteSettingsOverride(siteID, override); err != nil {
+		return SiteDetailView{}, err
+	}
+	_ = a.runnerSupervisor().ReloadSiteConfig(siteID)
+	return a.GetSiteDetail(siteID)
+}
+
+// RefreshSiteSession re-validates a site's isolated session store and returns
+// the updated SiteDetailView (Prompt 9).
+func (a *App) RefreshSiteSession(siteID string) (SiteDetailView, error) {
+	if strings.TrimSpace(siteID) == "" {
+		siteID = a.activeSiteID()
+	}
+	_ = a.runnerSupervisor().ReloadSiteConfig(siteID)
+	return a.GetSiteDetail(siteID)
+}
+
 // SaveSiteSettingsOverride stores a per-site override (custom proxy, message
 // mode, API endpoint, ...). Sections left nil keep following the global file.
 func (a *App) SaveSiteSettingsOverride(siteID string, override settings.Override) (settings.Effective, error) {
@@ -1315,6 +1476,7 @@ func (a *App) SaveSiteSettingsOverride(siteID string, override settings.Override
 	if _, err := st.SaveOverride(siteID, override); err != nil {
 		return settings.Effective{}, err
 	}
+	_ = a.runnerSupervisor().ReloadSiteConfig(siteID)
 	effective, err := a.effectiveSiteSettings(siteID)
 	if err != nil {
 		return settings.Effective{}, err
@@ -1341,6 +1503,7 @@ func (a *App) ClearSiteSettingsOverride(siteID string) (settings.Effective, erro
 	if err := st.ClearOverride(siteID); err != nil {
 		return settings.Effective{}, err
 	}
+	_ = a.runnerSupervisor().ReloadSiteConfig(siteID)
 	effective, err := a.effectiveSiteSettings(siteID)
 	if err != nil {
 		return settings.Effective{}, err
