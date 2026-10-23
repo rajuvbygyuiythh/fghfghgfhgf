@@ -9,8 +9,8 @@
 > 2. তারপর ঠিক **একই dashboard** বানাবে — layout, section, field, default,
 >    validation, status text, log feed, counter — সব হুবহু এক, শুধু ভেতরের
 >    adapter বদলাবে;
-> 3. dashboard-এ **কোনো সাইটের নাম/URL কোথাও থাকবে না** — শুধু নিরপেক্ষ
->    branding (`Chat Bot`, `CB`, `Desktop Engine`) আর capability state;
+> 3. dashboard-এ **কোনো target-site-এর নাম/URL থাকবে না** — শুধু আপনার নিজের
+>    product branding (`config/branding.json`) আর capability state;
 > 4. শেষে একটা **parity test** চালাবে যা প্রমাণ করবে dashboard আগের মতোই আছে
 >    আর কোনো সাইট-নাম leak হয়নি।
 >
@@ -21,8 +21,18 @@
 > **নতুন সাইটে পুরোনো dashboard রাখতে:** কিছুই বদলাতে হবে না — agent শুধু নতুন
 > `adapters/<site_id>/` লিখবে; UI ফাইল ছোঁবে না (parity test fail করবে যদি ছোঁয়)।
 >
+> **গুরুত্বপূর্ণ — কোন dashboard:** এই spec = আপনার দেখানো **single-site**
+> build-টাই হুবহু: বাঁ পাশে brand → **Show Mode** / **API Mode** → ৫টা sub-item →
+> **Workers** pill (আর কিছু না); Show Mode-এ `1 · Setting` `2 · Proxy`
+> `3 · Message` `4 · Run Browser` `5 · Live Logs`; API Mode-এ `1 · Login Capture`
+> `2 · Proxy` `3 · Message` `4 · Bot Settings` `5 · Live Logs`; তিনটা chat mode —
+> **Single Sequence / Folder Sequences / EVAChat Flow**। আগের version-এ আমি ভুল
+> করে একটা "Adapter" বাক্স যোগ করেছিলাম আর `EVAChat Flow`-কে `TXT Flow` নাম
+> দিয়েছিলাম — **দুটোই বাদ**, এখন spec আপনার স্ক্রিনশটের সাথে মিলে যায়
+> (দেখুন §2 PARITY RULE + Appendix D)।
+>
 > PART B = একই জিনিসের ছোট ভার্সন (ছোট context window হলে)।
-> Appendix = parity test কোড, capability matrix, "new site in 30 minutes" runbook।
+> Appendix = parity test কোড, capability matrix, runbook, reference-screen map।
 
 ---
 
@@ -40,6 +50,23 @@ PRODUCT NAME FOR THE UI:       <<default "Chat Bot" — must NOT contain the sit
 Everything below is **frozen**. Do not add, remove, rename or simplify screens.
 The only thing that changes per site is the adapter (section 4) and the values in
 `config/site.json` (section 3) — **never the UI, never the option set**.
+
+**PARITY RULE (read twice).** The dashboard you ship must look and behave
+exactly like the reference build this spec describes:
+
+- sidebar = brand, `Show Mode` / `API Mode`, 5 sub-items for the active page,
+  `Workers` pill — nothing else (no adapter box, no site box, no extra strip);
+- `Show Mode` = `1 · Setting`, `2 · Proxy`, `3 · Message`, `4 · Run Browser`,
+  `5 · Live Logs`;
+- `API Mode` = `1 · Login Capture`, `2 · Proxy`, `3 · Message`,
+  `4 · Bot Settings`, `5 · Live Logs`;
+- the three chat modes are **Single Sequence**, **Folder Sequences**,
+  **EVAChat Flow**; the same labels, hints, defaults and ids as written below.
+
+Adding a "helper" panel, renaming a section, neutralising an existing label or
+dropping an option because the current site cannot use it is a **regression**.
+Missing capability ⇒ the control is disabled with
+`Not supported by the current adapter`; it is never removed or renamed.
 
 ---
 
@@ -64,11 +91,11 @@ timing settings and its own log feed.
 
 ## 2. NON-NEGOTIABLE RULES
 
-1. **The UI never names a site.** No site name, brand name, domain, URL, logo or
-   "target site" label anywhere in `frontend/dist/**` or in any string the UI
-   renders. Allowed only: the neutral product name from config (default
-   **"Chat Bot"**), the neutral initials (**"CB"**), the neutral subtitle
-   (**"Desktop Engine"**), and neutral state words (section 6.1).
+1. **The UI never names the target site.** No target-site name, domain, URL,
+   logo or "target site" label anywhere in `frontend/dist/**`, in any rendered
+   string, or in the log feed. Product branding (mark, product name, subtitle)
+   comes from `config/branding.json` only — it is fixed for the product, identical
+   on every build, and must not contain the target site's name.
 2. **Frozen UI contract.** Every screen, section, field id, default, validation
    message, status text, log format and counter in sections 5–8 exists in every
    build. A build for a different site must produce a **byte-identical UI bundle**
@@ -223,8 +250,8 @@ Rules for adapters:
 
 ```
 ┌──────────── 238px sidebar (#191b17) ─────────────┬──────── main (scroll) ────────┐
-│ [CB] Chat Bot                                    │  Show Mode   [Idle]   Refresh │
-│      Desktop Engine                              │  frozen one-line description  │
+│ [mark] <product name>                            │  Show Mode   [Idle]   Refresh │
+│        <product subtitle>                        │  frozen one-line description  │
 │                                                  │                               │
 │ ┌ Show Mode ───────────────────────────────────┐ │  ┌── 1 · Setting ───────────┐ │
 │ │  API Mode     (active = accent tint+border)  │ │  │ hint + fields            │ │
@@ -233,22 +260,25 @@ Rules for adapters:
 │   Setting · Proxy · Message · Run Browser ·      │  │ …                        │ │
 │   Live Logs        (active = accent pill)        │  └──────────────────────────┘ │
 │                                                  │                               │
-│ ┌ Adapter ─────────┐                             │                               │
-│ │  ready · session │                             │                               │
-│ └──────────────────┘                             │                               │
+│                                                  │                               │
 │ ┌ Workers ─────────┐                             │                               │
 │ │        [Stopped] │                             │                               │
 └──────────────────────────────────────────────────┴───────────────────────────────┘
 ```
 
-- Brand: 40px accent square with **CB**, title **Chat Bot**, subtitle
-  **Desktop Engine**. All three come from
-  `config/branding.json` = `{ "mark": "CB", "name": "Chat Bot", "subtitle": "Desktop Engine" }`
-  and are the **only** branding strings. The parity test fails if any other
-  product/site name appears in the bundle.
-- Adapter box (bottom, above Workers): one line, neutral:
-  `Adapter ready` / `Adapter not configured`, and `· session saved {date}` when a
-  session exists. **No site name, no URL, no folder path.**
+- Brand: 40px accent square with the mark, product title and subtitle, all three
+  from `config/branding.json` (defaults
+  `{ "mark": "CB", "name": "Chat Bot", "subtitle": "Desktop Engine" }`).
+  These three strings are the **only** branding in the product and they come from
+  config, not from code — set the product name you want and keep it forever.
+  It must **never** contain the target site's name/domain (that is what varies);
+  the parity test fails on any blocklisted name in the bundle.
+- **No adapter box, no status strip, no extra widget in the sidebar.** The
+  sidebar is exactly: brand → `Show Mode` / `API Mode` → 5 sub-items → `Workers`
+  pill. Adapter readiness surfaces only through the normal status lines
+  (`Adapter not configured.` when Run Browser / Save & Start Bot is pressed
+  without a working adapter). Parity with the reference build wins over
+  convenience.
 - Workers footer: label **Workers** + pill **Stopped** / **Running**.
 - Sub-nav ids `subnav-show`, `subnav-api`; only the active one is visible.
 - **Nothing else in the sidebar.**
@@ -345,8 +375,10 @@ empty input → **"Enter at least one proxy to test."**
 exactly three chips (`name="sm-chat-mode"`):
 `sm-mode-option-single`/`sm-chat-mode-single` `single` **Single Sequence** ·
 `sm-mode-option-folder`/`sm-chat-mode-folder` `folder` **Folder Sequences** ·
-`sm-mode-option-flow`/`sm-chat-mode-flow` `flow` **TXT Flow**.
-(Third chip label is **TXT Flow** — neutral; never a product/site name.)
+`sm-mode-option-evachat`/`sm-chat-mode-evachat` `eva_chat_flow` **EVAChat Flow**.
+(`EVAChat Flow` is the *internal reply engine's* name — it ships with the product
+and is identical for every target site; it is not a site name and must not be
+renamed.)
 Only the chosen block is visible:
 - `sm-section-single-mode` — `sm-sequence` textarea 7 rows **Message sequence**,
   placeholder `hello how are you %username%` ⏎ `ok i am checking. wait a bit.`,
@@ -355,9 +387,10 @@ Only the chosen block is visible:
   `sm-clean-loaded` **Clean Loaded** (danger), `sm-loaded-status`
   (`0 sequences loaded` → `{n} sequences loaded`). Load forces mode=folder;
   clean forces mode=single.
-- `sm-section-flow-mode` — `sm-open-flow` **Open Flow Data Folder** +
-  `sm-flow-status` (default "Flow data is initialized on first run.") + hint
-  *"Pure text flow: the reply pools in this folder decide every line."*
+- `sm-section-evachat-mode` — `sm-open-eva` **Open EVAChat Data Folder** +
+  `sm-eva-status` (default "TXT data is initialized on first run.") + hint
+  *"Pure TXT flow: the reply pools in this folder decide every line; AI only
+  rewrites wording when enabled."*
   Optional AI-rewrite block (kept for every site, hidden if unsupported):
   checkbox `sm-ai-enabled` **AI rewrite (text rules decide the flow)** ·
   `sm-ai-base-url` **API base URL** · `sm-ai-model` **Model** ·
@@ -427,11 +460,12 @@ blocks, usernames); same saved record; no Save button.
 
 ### 5.5 Neutral text rules (grep-enforced)
 
-Allowed strings only: `Chat Bot`, `CB`, `Desktop Engine`, `Show Mode`, `API Mode`,
-`Setting`, `Proxy`, `Message`, `Run Browser`, `Live Logs`, `Login Capture`,
-`Bot Settings`, `Workers`, `Adapter ready`, `Adapter not configured`,
+Allowed strings only: the three `config/branding.json` values (mark, product
+name, subtitle), `Show Mode`, `API Mode`, `Setting`, `Proxy`, `Message`,
+`Run Browser`, `Live Logs`, `Login Capture`, `Bot Settings`, `Workers`,
+`EVAChat Flow`, `Open EVAChat Data Folder`, `Adapter not configured`,
 `Not supported by the current adapter`, plus the fixed labels/status texts in
-this spec. **Forbidden in shipped UI files:** any domain, `http://`, `https://`,
+this spec. The *target site's* name and domain are never allowed anywhere. **Forbidden in shipped UI files:** any domain, `http://`, `https://`,
 any site/brand name, any filesystem path, any account id.
 A build-time test greps the bundle for `https?://` and for the blocklist defined
 in `tests/ui-blocklist.json` and fails on a match.
@@ -471,8 +505,8 @@ the loop and flips the badge to Idle.
   `{a|b}` alternatives, `%username%` random handle.
 - **Folder Sequences** — a folder of `.txt` files, one sequence per file; the
   engine picks a file and walks it; `Clean Loaded` forgets them.
-- **TXT Flow** — stateful engine over two text corpora
-  (`data/flow/input/*.txt` triggers, `data/flow/output/*.txt` reply pools, same
+- **EVAChat Flow** — stateful engine over two text corpora
+  (`data/eva_chat/input/*.txt` triggers, `data/eva_chat/output/*.txt` reply pools, same
   file name = same category). Stages: `NEW → WAIT_AGE_GENDER → WAIT_COUNTRY →
   MIDDLE → END`; every output pool fires once per partner except repeatable
   pools; reply cap from `config/site.json#limits.max_replies_per_chat` → closer →
@@ -559,7 +593,7 @@ settings/proxy              enabled, entries
 settings/browser            profile, backend, headless, use_saved_session
 sites/<site_id>/profiles/   browser profiles                (git-ignored)
 sites/<site_id>/sessions/   latest_session.json             (git-ignored)
-data/flow/input|output/     text trigger pools / reply pools
+data/eva_chat/input|output/ text trigger pools / reply pools
 logs.txt                    append-only history (UI Clear never truncates)
 ```
 
@@ -588,7 +622,7 @@ TestProxyEntries(rawLines) -> [{ line, ok, tunnel_ok, label, latency_ms, status,
                                 detail, provider_message, proxy_authenticate, hint }]
 LoadMessageFolder() -> [string]
 ClearLoadedMessages() -> void
-OpenFlowDataFolder() -> string
+OpenEVAChatDataFolder() -> string
 TestAIRewrite(MessageSettings) -> string
 ```
 
@@ -691,10 +725,11 @@ LogEntry { "time":"HH:MM:SS","kind":"in|out|skip|system|error",
 
 > Part A is authoritative; send it when possible.
 
-Build/extend a **site-neutral** chat-bot dashboard. Rule #1: the UI never names a
-site — only neutral branding (`Chat Bot` / `CB` / `Desktop Engine`) and neutral
-state words. Everything site-specific lives in `adapters/<site_id>/` +
-`config/site.json` (capabilities + limits); never in the UI, engine or cmd.
+Build/extend the **same** chat-bot dashboard for every site. Rule #1: the UI
+never names the *target site* — branding comes from `config/branding.json`
+(mark / product name / subtitle) and is fixed for the product. Everything
+site-specific lives in `adapters/<site_id>/` + `config/site.json` (capabilities +
+limits); never in the UI, engine or cmd.
 
 **Workflow:** (1) Discovery — read the provided brief/capture, learn login,
 session, match, incoming/outgoing transports, skip, DMs, rate limits, errors;
@@ -705,10 +740,10 @@ ask ≤10 questions with defaults if missing; write `docs/sites/<site_id>.md` +
 verbatim. (4) Verify with the parity test; the UI bundle hash must not change
 between sites.
 
-**Shell:** 238px sidebar `#191b17`: brand `CB` + **Chat Bot** + **Desktop
-Engine** → tabs **Show Mode** / **API Mode** → 5 sub-items of the active tab →
-`Adapter ready|Adapter not configured · session saved {date}` → `Workers` +
-pill. Cards numbered `1 · … 5 · …`. Tokens: bg `#161716`, panel `#20221e`,
+**Shell:** 238px sidebar `#191b17`: brand (`branding.json`: mark + product name +
+subtitle) → tabs **Show Mode** / **API Mode** → 5 sub-items of the active tab →
+`Workers` + pill. **No adapter box, no extra widget.** Cards numbered
+`1 · … 5 · …`. Tokens: bg `#161716`, panel `#20221e`,
 alt `#282b25`, line `#3e4439`, text `#eef2e8`, muted `#b5beb0`, accent `#83cb73`,
 warn `#d9b74d`, danger `#d36a6a`; card radius 14/padding 18/gap 11; chips radius 8;
 log box `#191b17`; every action has a status line (neutral/ok/error).
@@ -723,7 +758,7 @@ no-reply 60/60, next-chat 0/0; hidden rows disabled.
 PASS / REACHABLE-SITE RESTRICTED / FAIL + `{passed}/{total}` summary.
 3 Message — **Chat mode** + exactly 3 chips: **Single Sequence** (textarea,
 `%username%`, `{a|b}`), **Folder Sequences** (Load Folder / Clean Loaded /
-"n sequences loaded"; 0 → cannot save), **TXT Flow** (Open Flow Data Folder +
+"n sequences loaded"; 0 → cannot save), **EVAChat Flow** (Open EVAChat Data Folder +
 optional AI rewrite: enable, base URL, model, key, Test AI); always Snap/Telegram
 users + hint; no Save button.
 4 Run Browser — Select Profile default/session + live session hint, full-width
@@ -754,7 +789,7 @@ StartBot → "Started. One worker runs per saved profile."; Stop → "Stopped."
 **Logic:** first-message policy decides who opens (bot / wait-user / random with
 stored per-partner decision); reply delay random in range; auto-skip after the
 no-reply window; next-chat wait between partners; three chat modes as above
-(TXT Flow = stateful pools with once-per-partner non-repeatable outputs, reply
+(EVAChat Flow = stateful pools with once-per-partner non-repeatable outputs, reply
 cap, age<18 ⇒ no contact sharing); AI rewrite only rewrites wording and never
 silently replaces the flow; capabilities `false` ⇒ control disabled with
 "Not supported by the current adapter" (never hidden).
@@ -763,7 +798,7 @@ silently replaces the flow; capabilities `false` ⇒ control disabled with
 SaveGeneralSettings, SaveMessageSettings, SaveProxySettings, SaveBrowserSettings,
 RunBrowser, StartBot, StopBot, GetShowModeLog, GetBotLog, ClearShowModeLog,
 ClearBotLog, TestProxyEntries, LoadMessageFolder, ClearLoadedMessages,
-OpenFlowDataFolder, TestAIRewrite — with the JSON shapes from Part A §8.3.
+OpenEVAChatDataFolder, TestAIRewrite — with the JSON shapes from Part A §8.3.
 
 **Verify:** go vet/test (fake adapter only), UI parity test (golden ids + bundle
 hash + blocklist + zero `http(s)://` in dist), capability-disable test, state
@@ -843,11 +878,11 @@ console.log("UI parity OK");
           "sm-noreply-min", "sm-noreply-max", "sm-next-min", "sm-next-max",
           "sm-proxy-enabled", "sm-proxy-scheme", "sm-proxy-entries",
           "sm-test-proxy", "sm-proxy-status", "sm-proxy-results",
-          "sm-chat-mode-single", "sm-chat-mode-folder", "sm-chat-mode-flow",
-          "sm-mode-option-single", "sm-mode-option-folder", "sm-mode-option-flow",
-          "sm-section-single-mode", "sm-section-folder-mode", "sm-section-flow-mode",
+          "sm-chat-mode-single", "sm-chat-mode-folder", "sm-chat-mode-evachat",
+          "sm-mode-option-single", "sm-mode-option-folder", "sm-mode-option-evachat",
+          "sm-section-single-mode", "sm-section-folder-mode", "sm-section-evachat-mode",
           "sm-sequence", "sm-load-folder", "sm-clean-loaded", "sm-loaded-status",
-          "sm-open-flow", "sm-flow-status", "sm-ai-enabled", "sm-ai-base-url",
+          "sm-open-eva", "sm-eva-status", "sm-ai-enabled", "sm-ai-base-url",
           "sm-ai-model", "sm-ai-api-key", "sm-ai-test", "sm-ai-status",
           "sm-usernames", "sm-profile-default", "sm-profile-session-choice",
           "sm-profile-session", "sm-run", "sm-run-status",
@@ -860,10 +895,10 @@ console.log("UI parity OK");
           "api-proxy-enabled", "api-proxy-scheme", "api-proxy-entries",
           "api-test-proxy", "api-proxy-status", "api-proxy-results",
           "api-sequence", "api-load-folder", "api-clean-loaded",
-          "api-loaded-status", "api-open-flow", "api-flow-status",
-          "api-chat-mode-single", "api-chat-mode-folder", "api-chat-mode-flow",
-          "api-mode-option-single", "api-mode-option-folder", "api-mode-option-flow",
-          "api-section-single-mode", "api-section-folder-mode", "api-section-flow-mode",
+          "api-loaded-status", "api-open-eva", "api-eva-status",
+          "api-chat-mode-single", "api-chat-mode-folder", "api-chat-mode-evachat",
+          "api-mode-option-single", "api-mode-option-folder", "api-mode-option-evachat",
+          "api-section-single-mode", "api-section-folder-mode", "api-section-evachat-mode",
           "api-ai-enabled", "api-ai-base-url", "api-ai-model", "api-ai-api-key",
           "api-ai-test", "api-ai-status",
           "api-usernames", "api-first-mode", "api-first-percent",
@@ -897,3 +932,26 @@ console.log("UI parity OK");
 | 10 | API Mode smoke (1 profile) | | | |
 ```
 Allowed statuses: **PASS / FAIL / BLOCKED / NOT_RUN**. Blocked is not pass.
+
+
+# APPENDIX D — reference-screen map (parity checklist)
+
+Nine screens, exactly as the reference build. An agent may use this as the
+acceptance walkthrough; anything missing is a regression.
+
+| # | Screen (sidebar selection) | Must contain |
+|---|---|---|
+| 1 | **Show Mode → 1 · Setting** | title `Show Mode` + `Idle` badge + `Refresh`; description "Configure, press Run Browser, log in once…"; card `1 · Setting` with hint "Run Browser applies these values. No separate save."; First-message policy · Wait for first message · Reply delay min/max · Auto-skip checkbox · No-reply timeout min/max · Next chat wait min/max |
+| 2 | **Show Mode → 2 · Proxy** | card `2 · Proxy`; Enable proxy · Default protocol for plain lines · Proxy lines · `Test Proxy` · "Not tested." · results area |
+| 3 | **Show Mode → 3 · Message** | card `3 · Message`; `Chat mode` + 3 chips (Single Sequence / Folder Sequences / EVAChat Flow); Folder → `Load Folder` `Clean Loaded` `3 sequences loaded`; EVAChat → `Open EVAChat Data Folder` + AI-rewrite block; `Snap / Telegram users` + hint "%username% inserts one random handle."; **no Save button** |
+| 4 | **Show Mode → 4 · Run Browser** | card `4 · Run Browser`; `Select Profile` chips default/session; session hint; full-width `▶ Run Browser`; "Idle."; footer hint "Saves Setting + Proxy + Message, then opens a visible browser…" |
+| 5 | **Show Mode → 5 · Live Logs** | card `5 · Live Logs`; All/SMS/Rules/Errors + `Clear`; empty state "No activity yet. Press Run Browser." |
+| 6 | **API Mode → 1 · Login Capture** | title `API Mode` + `API worker` badge; `Save & Start Bot` `Stop` `Refresh`; description "Match, DM and reply without a visible browser…"; `Backend: … · Profiles auto-start · Message steps: n`; "Idle."; **6 counters** (Dead accounts red); card `1 · Login Capture` with Profile + datalist + hint · Browser mode · Headless checkbox · `Launch for Login` · "No browser launched." |
+| 7 | **API Mode → 2 · Proxy** | card `2 · Proxy`, identical to screen 2 with `api-` ids |
+| 8 | **API Mode → 3 · Message** | card `3 · Message`, identical to screen 3 with `api-` ids (same 3 chips, same blocks, same usernames field) |
+| 9 | **API Mode → 4 · Bot Settings** | card `4 · Bot Settings`; First-message policy (+ conditional rows); Poll · Action · Skip timeout · Chat closed wait · Worker reply delay (min/max pairs) |
+| 10 | **API Mode → 5 · Live Logs** | card `5 · Live Logs`; All/SMS/Rules/Errors + `Clear`; feed rows `time · IN/OUT/SKIP/SYS/ERR · text`; empty state "No activity yet. Press Save & Start Bot." |
+
+Sidebar on **every** screen: brand block · `Show Mode` · `API Mode` · the active
+page's 5 sub-items · `Workers` + pill. **No** site selector, search, filters, site
+table, adapter box, folder button or debug panel — in any build, for any site.
